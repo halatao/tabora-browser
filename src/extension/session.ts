@@ -2,13 +2,19 @@ import { z } from 'zod';
 import { PROVIDERS, PilotError, safeCode, exactOrigin, providerId, type Snapshot, type Binding, type ActionPlan, type DecisionRequest, type DecisionResult } from '../shared.js';
 import { pageOperation, type PageInput } from './page.js';
 import { summarize, type BenchmarkRow } from '../benchmark.js';
+import {enforceRecipe} from './policy.js';
 
-export function createBrowserSession(id:string,name:string,external:boolean,host:(command:string,payload?:unknown)=>Promise<any>){
+export function createBrowserSession(id:string,name:string,external:boolean,host:(command:string,payload?:unknown)=>Promise<any>,policy=()=>({mode:'takeover' as 'safe'|'takeover'|'readonly',vaultEnabled:true}),validateTab:(tabId:number)=>Promise<void>=async()=>{}){
 let binding:Binding|undefined,snapshot:Snapshot|undefined,recipe:ActionPlan['recipe']='click';
 let pending:{id:string;plan:ActionPlan;expires:number}|undefined;
 let generation=0,busy=false,running=false,closed=false;
 async function inDocument(input:PageInput) {
   if(!binding)throw new PilotError('no_bound_tab');
+  if(input.op!=='cancel'){
+    const run=generation;await validateTab(binding.tabId);
+    if(run!==generation||!binding)throw new PilotError('cancelled');
+    enforceRecipe(policy(),input.op==='execute'?input.recipe:input.kind);
+  }
   const results=await chrome.scripting.executeScript({target:{tabId:binding.tabId,documentIds:[binding.documentId]},world:'ISOLATED',func:pageOperation,args:[input]});
   const result=results[0]?.result;if(!result?.ok)throw new PilotError(result?.code??'execution_failed');return result;
 }
@@ -19,6 +25,7 @@ function decisionRequest(question:string):DecisionRequest {
     choices:[...snapshot.targets.map(t=>({id:t.id,description:`${t.kind}: ${t.name}`})),{id:'ask_user',description:'Insufficient information or no suitable target. Ask the user.'}]};
 }
 async function command(name:string,payload:any) {
+  if(['observe','decide','manual'].includes(name))enforceRecipe(policy(),payload?.recipe);
   if(name==='cancel') {generation++;pending=undefined;snapshot=undefined;await inDocument({op:'cancel'}).catch(()=>{});await host('cancel');return {cancelled:true};}
   if(name==='status')return {...await host('status'),binding,snapshot,busy};
   if(busy)throw new PilotError('busy');
@@ -64,12 +71,14 @@ async function command(name:string,payload:any) {
     if(!pending||pending.expires<Date.now()||(payload?.actionId&&payload.actionId!==pending.id))throw new PilotError('decision_expired');
     const {plan}=pending;pending=undefined;busy=true;const run=generation;
     try {
+      enforceRecipe(policy(),plan.recipe);
       let credential:{username:string;password:string}|undefined;
       if(plan.recipe==='login'){
         if(!plan.credentialId)throw new PilotError('select_credential');
         credential=await host('credential.use',{id:plan.credentialId,binding:plan.binding});
       }
       if(run!==generation)throw new PilotError('cancelled');
+      enforceRecipe(policy(),plan.recipe);
       return await inDocument({op:'execute',origin:plan.binding.origin,token:plan.snapshot.documentToken,targetId:plan.targetId,recipe:plan.recipe,fields:plan.fields,credential});
     } finally {busy=false;}
   }

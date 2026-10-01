@@ -16,11 +16,11 @@ catch (e) {
 const extensionId = [...createHash('sha256').update(Buffer.from(key, 'base64')).digest().subarray(0, 16)].map(b=>String.fromCharCode(97+(b>>4),97+(b&15))).join('');
 await writeFile('extension-id.txt', extensionId + '\n');
 await writeFile('dist/extension/manifest.json', JSON.stringify({
-  manifest_version: 3, name: 'Tabora Browser', version: '0.2.0', key,
+  manifest_version: 3, name: 'Tabora Browser', version: JSON.parse(await readFile('package.json','utf8')).version, key,
   description: 'Local browser control for AI agents, with MCP and an optional encrypted vault.',
   minimum_chrome_version: '116',
   permissions: ['activeTab', 'tabs', 'tabGroups', 'scripting', 'nativeMessaging', 'storage', 'sidePanel'],
-  optional_host_permissions: ['http://*/*', 'https://*/*'],
+  host_permissions: ['http://*/*', 'https://*/*'],
   background: { service_worker: 'background.js', type: 'module' },
   action: { default_title: 'Tabora Browser' },
   side_panel: { default_path: 'panel.html' },

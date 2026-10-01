@@ -53,8 +53,8 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
     failure=undefined;
     const result=await rpc();assert.equal(result.ok,true);
     assert.equal(result.data.length,1);assert.equal(result.data[0].id,'panel');
-    assert(sent.every(command=>command==='hello'),'reconnect must not replay browser or vault commands');
-    assert.equal(stored.mcpEnabled,false);
+    assert(sent.every(command=>['hello','profile.detect'].includes(command)),'reconnect must not replay browser or vault commands');
+    assert.equal(stored.mcpEnabled,true);assert.equal(stored.mode,'safe');assert.equal(stored.vaultEnabled,false);
   } finally {
     for(const port of ports)port.disconnect();
     globalThis.chrome=originalChrome;t.mock.timers.reset();

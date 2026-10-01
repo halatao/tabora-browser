@@ -42,6 +42,9 @@ export async function pageOperation(input: PageInput): Promise<any> {
         state.entries.set(id,{el,kind,fingerprint:fingerprint(el)});
         if(targets.length>=48)break;
       }
+      if(input.kind==='extract'&&targets.length<48&&document.body&&visible(document.body)){
+        const id='e'+targets.length;targets.push({id,kind:'text',name:'Obsah stránky'});state.entries.set(id,{el:document.body,kind:'text',fingerprint:fingerprint(document.body)});
+      }
       const snapshot:Snapshot={documentToken:state.token,origin:location.origin,path:location.pathname,targets};
       return {ok:true,snapshot,limitations:{iframes:document.querySelectorAll('iframe').length,limit:48}};
     }
@@ -50,6 +53,9 @@ export async function pageOperation(input: PageInput): Promise<any> {
     const check=()=>{assertReady(entry.el);if(world.__browserPilot!==state||location.origin!==input.origin||fingerprint(entry.el)!==entry.fingerprint)throw new Error('stale_snapshot');};
     check();
     if(input.recipe==='extract') {
+      if(entry.kind==='text'){
+        const content=(entry.el as HTMLElement).innerText;state.entries.delete(input.targetId);return {ok:true,text:content.slice(0,16000),truncated:content.length>16000};
+      }
       if(entry.kind!=='table')throw new Error('wrong_target_kind');
       const rows=Array.from(entry.el.querySelectorAll('tr')).slice(0,101).map(row=>Array.from(row.querySelectorAll('th,td')).slice(0,30).map(cell=>text(cell.textContent)));
       state.entries.delete(input.targetId);return {ok:true,rows,truncated:entry.el.querySelectorAll('tr').length>101};

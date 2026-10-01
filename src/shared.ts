@@ -9,6 +9,7 @@ export const providerNames: Record<ProviderId, string> = {
 };
 export const configSchema = z.object({
   provider: providerId, model: z.string().trim().max(120),
+  connection:z.enum(['sdk','environment','vault']).optional(),
   timeoutMs: z.number().int().min(1000).max(120000).default(30000),
 }).strict();
 export type ProviderConfig = z.infer<typeof configSchema>;
@@ -53,12 +54,16 @@ export function exactOrigin(value: string, secure = false): string {
   if (!['http:', 'https:'].includes(u.protocol) || (secure && u.protocol !== 'https:') || u.username || u.password) throw new PilotError('invalid_origin');
   return u.origin;
 }
-export interface PageTarget { id: string; kind: 'link' | 'button' | 'form' | 'table'; name: string; fields?: string[]; }
+export interface PageTarget { id: string; kind: 'link' | 'button' | 'form' | 'table' | 'text'; name: string; fields?: string[]; }
 export interface Snapshot { documentToken: string; origin: string; path: string; targets: PageTarget[]; }
 export interface Binding { tabId: number; documentId: string; origin: string; }
 export interface ActionPlan { binding: Binding; snapshot: Snapshot; recipe: 'click' | 'fill' | 'login' | 'extract'; targetId: string; fields?: Record<string, string>; credentialId?: string; }
 export const idSchema = z.string().uuid();
-export const profileSchema = z.object({id:idSchema,name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean()}).strict();
+export const browserMode=z.enum(['safe','takeover','readonly']);
+export const profileSchema = z.object({id:idSchema,name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean(),
+  mode:browserMode.optional(),vaultEnabled:z.boolean().optional(),activeProvider:z.enum(['agent',...PROVIDERS]).optional(),
+  browserProfileKey:z.string().max(160).optional(),nameSource:z.enum(['automatic','selected','legacy']).optional()
+}).strict();
 export type BrowserProfile = z.infer<typeof profileSchema>;
 export const secretScopeSchema = z.discriminatedUnion('type',[
   z.object({type:z.literal('shared')}).strict(),

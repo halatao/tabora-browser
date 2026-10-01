@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PROTOCOL_VERSION, PilotError, safeCode, idSchema, profileSchema } from '../shared.js';
 import { NativeDecoder, encodeMessage } from './codec.js';
 import { connectBroker } from './broker-client.js';
+import { detectBrowserProfiles } from './browser-profiles.js';
 const id=(await readFile(path.join(import.meta.dirname,'../../extension-id.txt'),'utf8')).trim();
 if(process.argv[2]!==`chrome-extension://${id}/`){process.stderr.write('Unrecognized extension origin.\n');process.exit(1);}
 const peer=await connectBroker('extension');let registered=false;
@@ -30,6 +31,7 @@ process.stdin.on('data',data=>{
     const operation=async()=>{
       if(m.command==='hello'){if(registered)throw new PilotError('already_registered');const p=await peer.call('profile.register',profileSchema.parse(m.payload));registered=true;return p;}
       if(!registered)throw new PilotError('profile_required');
+      if(m.command==='profile.detect')return detectBrowserProfiles(m.payload);
       if(m.command==='profile.update')return peer.call(m.command,m.payload);
       return peer.call('host',{command:m.command,payload:m.payload,sessionId:m.sessionId});
     };

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -53,9 +53,20 @@ try {
   assert.deepEqual(JSON.parse((await browser('status', '--profile', 'test')).stdout), { running: false });
   const restarted = JSON.parse((await browser('start', '--profile', 'test', '--headless')).stdout);
   assert.equal(restarted.profileId, first.profileId); assert.deepEqual(restarted.origins, [origin]);
+  const automatic=JSON.parse((await browser('start','--profile','automatic','--headless')).stdout);
+  assert.equal(automatic.mcpEnabled,true);
+  const autoManifest=JSON.parse(await readFile(path.join(directory,'managed','automatic','extension','manifest.json'),'utf8'));
+  assert.deepEqual(autoManifest.host_permissions,['http://*/*','https://*/*']);
+  const autoClient=new Client({name:'tabora-default-access-test',version:'1.0.0'});
+  try{
+   await autoClient.connect(new StdioClientTransport({command:process.execPath,args:[path.resolve('dist/host/mcp.js')],env,stderr:'pipe'}));
+   const profiles=await autoClient.callTool({name:'browser_profiles',arguments:{}});
+   const names=JSON.parse(profiles.content.find(x=>x.type==='text').text);assert.equal(names.find(p=>p.id===automatic.profileId).name,'automatic');
+  }finally{await autoClient.close();}
+  await browser('stop','--profile','automatic');
   console.log('PASS: automatic managed installation, idempotent start, MCP -> native -> extension -> real DOM click, shutdown and persistent profile restart.');
 } finally {
-  await client.close(); await browser('stop', '--profile', 'test');
+  await client.close(); await browser('stop', '--profile', 'test');await browser('stop','--profile','automatic');
   fixture.closeAllConnections(); await new Promise(resolve => fixture.close(resolve));
   assert.equal(path.dirname(directory), base); await rm(directory, { recursive: true, force: true, maxRetries: 5 });
 }

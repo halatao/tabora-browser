@@ -1,14 +1,15 @@
-import { PROVIDERS, providerNames, exactOrigin, type BrowserProfile, type SecretScope, type ProviderId, type Snapshot, type VaultMetadata } from '../shared.js';
+import { PROVIDERS, providerNames, type BrowserProfile, type SecretScope, type ProviderId, type Snapshot, type VaultMetadata } from '../shared.js';
 import { summarize, type BenchmarkRow } from '../benchmark.js';
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const val=(id:string)=>$<HTMLInputElement>(id).value;
 const node=(tag:string,text?:string,className?:string)=>{const n=document.createElement(tag);if(text)n.textContent=text;if(className)n.className=className;return n;};
 const option=(value:string,text:string)=>{const e=document.createElement('option');e.value=value;e.textContent=text;return e;};
 let tabs:chrome.tabs.Tab[]=[],lastRows:BenchmarkRow[]=[],table:string[][]=[];
-let profile:BrowserProfile|undefined,selectedSession='panel';
+let profile:BrowserProfile|undefined,selectedSession='panel',configs:any[]=[],catalogGeneration=0;
+let profileCandidates:{key:string;name:string}[]=[];
 const scopedCommands=new Set(['status','pin','observe','decide','manual','execute','cancel','benchmark','tabs.open','session.release']);
 function secretScope(value:string):SecretScope {if(value==='shared')return {type:'shared'};if(!profile)throw new Error('profile_required');return {type:'profile',profileId:profile.id};}
-const errors:Record<string,string>={native_host_unavailable:'Lokální host není dostupný. Spusť scripts/install-host.ps1 podle README a obnov spojení.',vault_locked:'Nejprve odemkni vault.',missing_api_key:'U poskytovatele chybí API klíč.',missing_model:'Vyplň název modelu v nastavení poskytovatele.',decisions_preview_unavailable:'Decisions API: čeká se na ověřenou preview specifikaci.',observe_first:'Připoj stránku a načti její prvky.',no_bound_tab:'Nejprve připoj konkrétní stránku.',no_candidates:'Na stránce nebyl nalezen podporovaný cíl.',stale_snapshot:'Stránka nebo cílový prvek se změnil. Znovu načti prvky.',stale_binding:'Dokument se změnil. Připoj stránku znovu.',credential_scope_mismatch:'Účet neodpovídá přesnému HTTPS originu stránky.',ambiguous_login_form:'Přihlašovací formulář není jednoznačný. Tento případ dokonči ručně.',partial_write:'Formulář se při vyplňování změnil. Zkontroluj částečně vyplněná pole.',navigation_out_of_scope:'Cíl vede na jiný origin. Novou stránku otevři a připoj samostatně.',decision_expired:'Návrh akce už neplatí. Připrav nový.',cancelled:'Úloha byla zastavena.',timeout:'Poskytovatel překročil časový limit.',unexpected_tools:'SDK zpřístupnilo neočekávané nástroje. Rozhodnutí bylo odmítnuto.',tool_call_blocked:'Pokus SDK použít nástroj byl zablokován.',provider_failed:'Poskytovatel selhal. Zkontroluj model a přístup; citlivý výstup se nezobrazuje.',authentication_failed:'Poskytovatel odmítl přihlášení. Zkontroluj API klíč.',site_permission_required:'Povol přístup k vybranému webu.',select_credential:'Vyber účet z vaultu.',browser_error:'Browser operace selhala. Připoj stránku znovu; nepodporované stránky a iframy ovládni ručně.'};
+const errors:Record<string,string>={native_host_unavailable:'Lokální host není dostupný. Spusť scripts/install-host.ps1 podle README a obnov spojení.',vault_locked:'Nejprve odemkni vault.',missing_api_key:'U poskytovatele chybí API klíč.',missing_model:'Vyber model poskytovatele.',decisions_preview_unavailable:'Decisions API: čeká se na ověřenou preview specifikaci.',observe_first:'Připoj stránku a načti její prvky.',no_bound_tab:'Nejprve připoj konkrétní stránku.',no_candidates:'Na stránce nebyl nalezen podporovaný cíl.',stale_snapshot:'Stránka nebo cílový prvek se změnil. Znovu načti prvky.',stale_binding:'Dokument se změnil. Připoj stránku znovu.',credential_scope_mismatch:'Účet neodpovídá přesnému HTTPS originu stránky.',ambiguous_login_form:'Přihlašovací formulář není jednoznačný. Tento případ dokonči ručně.',partial_write:'Formulář se při vyplňování změnil. Zkontroluj částečně vyplněná pole.',navigation_out_of_scope:'Cíl vede na jiný origin. Novou stránku otevři a připoj samostatně.',decision_expired:'Návrh akce už neplatí. Připrav nový.',cancelled:'Úloha byla zastavena.',timeout:'Poskytovatel překročil časový limit.',unexpected_tools:'SDK zpřístupnilo neočekávané nástroje. Rozhodnutí bylo odmítnuto.',tool_call_blocked:'Pokus SDK použít nástroj byl zablokován.',provider_failed:'Poskytovatel selhal. Zkontroluj model a přístup; citlivý výstup se nezobrazuje.',authentication_failed:'Poskytovatel odmítl přihlášení. Zkontroluj API klíč.',site_permission_required:'Chrome nepovolil přístup k tomuto webu. Zkontroluj oprávnění Tabory v nastavení rozšíření.',select_credential:'Vyber účet z vaultu.',browser_error:'Browser operace selhala. Připoj stránku znovu; nepodporované stránky a iframy ovládni ručně.'};
 function notice(text:string,success=false){$('notice').hidden=false;$('notice').textContent=text;$('notice').className=success?'success':'';}
 Object.assign(errors,{
   native_host_not_registered:'Chrome nenalezl registraci lokálního hostu (native_host_not_registered). Spusť scripts/install-host.ps1 z tohoto repozitáře.',
@@ -19,14 +20,63 @@ Object.assign(errors,{
 });
 Object.assign(errors,{tab_in_use:'Tab už používá jiná relace. Nejprve ji uvolni.',session_owned_by_mcp:'Tuto relaci ovládá MCP klient. Můžeš ji zastavit nebo uvolnit.',scope_conflict:'V cílové dostupnosti už existuje klíč pro tohoto poskytovatele. Nejdříve rozhodni, který zachovat.',profile_scope_mismatch:'Položka patří jinému profilu.',unknown_session:'Relace skončila. Obnov seznam relací.',mcp_access_disabled:'Pro tento profil není povolen přístup přes MCP.',busy:'V této relaci právě probíhá jiný krok.'});
 async function rpc(command:string,payload?:any):Promise<any>{const r=await chrome.runtime.sendMessage({command,payload:scopedCommands.has(command)?{...payload,sessionId:selectedSession}:payload});if(!r?.ok)throw new Error(r?.code??'native_host_unavailable');return r.data;}
-async function perform(fn:()=>Promise<void>){for(const b of document.querySelectorAll<HTMLButtonElement>('.when-idle'))b.disabled=true;try{await fn();}catch(e){const code=e instanceof Error?e.message:'internal_error';notice(errors[code]??code);}finally{for(const b of document.querySelectorAll<HTMLButtonElement>('.when-idle'))b.disabled=false;}}
+async function perform(fn:()=>Promise<void>){for(const b of document.querySelectorAll<HTMLButtonElement>('.when-idle'))b.disabled=true;try{await fn();}catch(e){const code=e instanceof Error?e.message:'internal_error';notice(errors[code]??code);}finally{for(const b of document.querySelectorAll<HTMLButtonElement>('.when-idle'))b.disabled=false;controls();}}
 function click(id:string,fn:()=>Promise<void>){$(id).addEventListener('click',()=>void perform(fn));}
 function saveDownload(name:string,content:string,type:string){const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 for(const p of PROVIDERS)$('provider').append(option(p,providerNames[p]));
-for(const button of document.querySelectorAll<HTMLButtonElement>('nav button'))button.onclick=()=>{
-  for(const b of document.querySelectorAll('nav button'))b.removeAttribute('aria-current');button.setAttribute('aria-current','page');
-  for(const section of document.querySelectorAll<HTMLElement>('.view'))section.hidden=section.id!==button.dataset.view;
-};
+$('settings-toggle').onclick=()=>{const open=$('settings').hidden;$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));if(open)void perform(detectProfile);};
+function controls(){
+  const agent=val('provider')==='agent',mode=profile?.mode??'safe';
+  $('existing-tabs').hidden=mode==='safe';$('vault').hidden=!profile?.vaultEnabled;$('provider-key-fields').hidden=val('provider-connection')!=='vault'||!profile?.vaultEnabled;
+  $('decide').toggleAttribute('disabled',agent||!val('model'));
+  const recipe=$<HTMLSelectElement>('recipe');for(const opt of recipe.options)opt.disabled=(mode==='readonly'&&opt.value!=='extract')||(opt.value==='login'&&!profile?.vaultEnabled);
+  if(recipe.selectedOptions[0]?.disabled){recipe.value='extract';recipeChanged();}
+}
+function resetPage(){for(const id of ['preview','snapshot-box','outcome'])$(id).hidden=true;}
+async function updateProfile(patch:Partial<BrowserProfile>){profile=await rpc('profile.update',patch);resetPage();await refresh();$('notice').hidden=true;}
+async function detectProfile(){
+  const result=await rpc('profile.detect',{browser:/Edg\//.test(navigator.userAgent)?'edge':'chrome',key:profile?.browserProfileKey});profileCandidates=result.candidates;
+  $('profile-choice').hidden=profileCandidates.length<2;
+  $('browser-profile').replaceChildren(option('','Vyber profil'),...profileCandidates.map(p=>option(p.key,p.name)));
+  $<HTMLSelectElement>('browser-profile').value=profile?.browserProfileKey??'';
+}
+function renderProvider(){
+  const p=val('provider'),agent=p==='agent';$('provider-connect').hidden=agent;$('agent-hint').hidden=!agent;$('provider-settings').hidden=agent;
+  if(agent){$('model').replaceChildren(option('','Vybírá připojený agent'));$<HTMLSelectElement>('model').disabled=true;controls();return;}
+  const config=configs.find(c=>c.provider===p),connection=config?.connection??'vault';
+  const choices=p==='codex-sdk'||p==='claude-sdk'?[option('sdk','Lokální přihlášení · SDK'),option('vault','API klíč · vault')]:[option('environment','Systémové prostředí'),option('vault','API klíč · vault')];
+  $('provider-connection').replaceChildren(...choices);$<HTMLSelectElement>('provider-connection').value=connection;
+  $('provider-key-fields').hidden=connection!=='vault'||!profile?.vaultEnabled;
+  $('connect-provider').textContent=connection==='sdk'?'Připojit SDK':'Načíst modely';
+  $('provider-state').textContent=p==='openai-decisions'?'Decisions API zatím není dostupné.':connection==='sdk'?'Použije lokální přihlášení.':connection==='vault'?'Vyžaduje zapnutý a odemčený vault.':'Použije klíč ze systémového prostředí.';
+  $('model').replaceChildren(option('','Připoj poskytovatele'));$<HTMLSelectElement>('model').disabled=true;controls();
+}
+async function loadModels(refresh=false){
+  const provider=val('provider');if(provider==='agent')return;
+  const generation=++catalogGeneration,connection=val('provider-connection');$('provider-state').textContent='Načítám katalog modelů…';$('model').replaceChildren(option('','Načítám modely…'));$<HTMLSelectElement>('model').disabled=true;controls();
+  const result=await rpc('provider.catalog',{provider,connection,refresh});
+  if(generation!==catalogGeneration||provider!==val('provider')||connection!==val('provider-connection'))return;
+  const labels:Record<string,string>={connected:'Připojeno · katalog SDK',login_required:'Nejprve se přihlas v lokálním Codex / Claude klientu.',missing_api_key:'Chybí klíč v systémovém prostředí.',preview_unavailable:'Decisions API zatím není dostupné.',configured_unverified:'Nastaveno · přístup ověří první rozhodnutí'};
+  $('provider-state').textContent=result.source==='account'?'Připojeno · modely účtu':labels[result.state]??result.state;
+  $('model').replaceChildren(...(result.models.length?result.models.map((m:any)=>option(m.id,m.label)):[option('','Žádné dostupné modely')]));
+  $<HTMLSelectElement>('model').disabled=!result.models.length;
+  const config=configs.find(c=>c.provider===provider),chosen=result.models.find((m:any)=>m.id===config?.model)??result.models.find((m:any)=>m.isDefault)??result.models[0];
+  if(chosen){$<HTMLSelectElement>('model').value=chosen.id;await saveModel();}controls();
+}
+async function saveModel(){
+  if(val('provider')==='agent'||!val('model'))return;
+  const config={provider:val('provider'),model:val('model'),connection:val('provider-connection'),timeoutMs:configs.find(c=>c.provider===val('provider'))?.timeoutMs??30000};
+  const state=await rpc('configure',config);configs=state.configs;
+}
+$('browser-profile').addEventListener('change',()=>void perform(async()=>{const p=profileCandidates.find(p=>p.key===val('browser-profile'));if(p)await updateProfile({name:p.name,browserProfileKey:p.key,nameSource:'selected'});}));
+for(const radio of document.querySelectorAll<HTMLInputElement>('input[name=mode]'))radio.addEventListener('change',()=>void perform(()=>updateProfile({mode:radio.value as BrowserProfile['mode']})));
+$('vault-enabled').addEventListener('change',()=>void perform(()=>updateProfile({vaultEnabled:$<HTMLInputElement>('vault-enabled').checked})));
+$('mcp-enabled').addEventListener('change',()=>void perform(()=>updateProfile({mcpEnabled:$<HTMLInputElement>('mcp-enabled').checked})));
+$('provider').addEventListener('change',()=>void perform(async()=>{catalogGeneration++;await updateProfile({activeProvider:val('provider') as BrowserProfile['activeProvider']});renderProvider();if(val('provider')!=='agent')await loadModels();}));
+$('provider-connection').addEventListener('change',()=>void perform(async()=>{catalogGeneration++;$('provider-key-fields').hidden=val('provider-connection')!=='vault'||!profile?.vaultEnabled;await loadModels();}));
+$('model').addEventListener('change',()=>void perform(saveModel));
+click('connect-provider',()=>loadModels(true));
+click('save-provider-key',async()=>{const secret=val('provider-key');$<HTMLInputElement>('provider-key').value='';await rpc('vault.put',{kind:'provider',provider:val('provider'),secret,scope:secretScope(val('provider-key-scope'))});await loadModels(true);notice('Klíč uložený do vaultu.',true);});
 function recipeChanged(){const r=val('recipe');$('fields-group').hidden=r!=='fill';$('credential-group').hidden=r!=='login';$('preview').hidden=true;}
 $('recipe').addEventListener('change',recipeChanged);
 function showSnapshot(s:Snapshot){
@@ -46,31 +96,21 @@ function showVault(entries:VaultMetadata[]){
   }));
 }
 function renderStatus(state:any){
-  if(state.profile){profile=state.profile;$<HTMLInputElement>('profile-name').value=profile!.name;$<HTMLInputElement>('mcp-enabled').checked=profile!.mcpEnabled;$('profile-id').textContent=`ID profilu: ${profile!.id}`;}
-  if(state.sessions){$('session').replaceChildren(...state.sessions.map((s:any)=>option(s.id,`${s.name}${s.external?' · MCP':''}`)));$<HTMLSelectElement>('session').value=selectedSession;}
+  if(state.profile){profile=state.profile;$('profile-label').textContent=profile!.name;$<HTMLInputElement>('mcp-enabled').checked=profile!.mcpEnabled;$<HTMLInputElement>('vault-enabled').checked=profile!.vaultEnabled??false;$('profile-id').textContent='ID profilu: '+profile!.id;
+    for(const r of document.querySelectorAll<HTMLInputElement>('input[name=mode]'))r.checked=r.value===(profile!.mode??'safe');
+    const descriptions={safe:'Agent pracuje ve vlastním novém okně a skupině. Přihlášení webů sdílí s tímto profilem.',takeover:'Agent může připojit existující tab a provádět v něm akce.',readonly:'Agent může číst existující stránky. Klikání a vyplňování je zablokované.'};
+    $('mode-description').textContent=descriptions[profile!.mode??'safe'];
+  }
+  if(state.sessions){$('session').replaceChildren(...state.sessions.map((s:any)=>option(s.id,s.name+(s.external?' · MCP':''))));$<HTMLSelectElement>('session').value=selectedSession;
+    const external=state.sessions.filter((s:any)=>s.external);$('session-count').textContent=external.length?external.length+' připojených úloh':'Připraveno pro agenta';}
   $('connection').textContent='Lokální host připojený';$('connection-dot').classList.add('online');
-  $('vault-state').textContent=state.locked?'Vault je pro tento profil zamčený.':'Vault je odemčený pro tento profil.';
-  if(state.locked)showVault([]);
-  $('bound').textContent=state.binding?`Připojeno: ${state.binding.origin} · tab ${state.binding.tabId}`:'Připoj stránku v této relaci.';
-  const labels:Record<string,string>={preview_unavailable:'Preview nedostupné',vault_locked:'Vault zamčený',missing_api_key:'Chybí API klíč',missing_model:'Chybí model',configured_unverified:'Nastaveno · netestováno',verified_session:'Ověřeno v této relaci'};
-  $('provider-cards').replaceChildren(...PROVIDERS.map(p=>{
-    const config=state.configs.find((c:any)=>c.provider===p),availability=state.providers.find((c:any)=>c.provider===p);
-    const card=node('div',undefined,'provider-card'),head=node('div',undefined,'provider-head');head.append(node('h3',providerNames[p]),node('span',labels[availability.state]??availability.state,'badge'));card.append(head);
-    if(p==='openai-decisions'){card.append(node('p','Živý adaptér se nezapne bez ověřené specifikace.','hint'));return card;}
-    const form=document.createElement('form'),label=node('label','Model'),model=document.createElement('input');model.value=config.model;model.required=true;model.maxLength=120;model.id=`model-${p}`;label.setAttribute('for',model.id);
-    const keyLabel=node('label','Nový API klíč (volitelné)'),key=document.createElement('input');key.id=`key-${p}`;key.type='password';key.autocomplete='new-password';keyLabel.setAttribute('for',key.id);
-    const timeLabel=node('label','Limit rozhodování v sekundách'),timeout=document.createElement('input');timeout.id=`timeout-${p}`;timeout.type='number';timeout.min='1';timeout.max='120';timeout.value=String(config.timeoutMs/1000);timeLabel.setAttribute('for',timeout.id);
-    const keyScopeLabel=node('label','Dostupnost nového klíče'),keyScope=document.createElement('select');keyScope.id=`scope-${p}`;keyScopeLabel.setAttribute('for',keyScope.id);keyScope.append(option('profile','Jen tento profil'),option('shared','Sdílený mezi profily'));
-    const save=node('button','Uložit nastavení','secondary') as HTMLButtonElement;save.type='submit';form.append(label,model,timeLabel,timeout,keyLabel,key,keyScopeLabel,keyScope,save);
-    form.onsubmit=e=>{e.preventDefault();void perform(async()=>{
-      if(key.value){const secret=key.value;key.value='';await rpc('vault.put',{kind:'provider',provider:p,secret,scope:secretScope(keyScope.value)});}
-      await rpc('configure',{provider:p,model:model.value.trim(),timeoutMs:Number(timeout.value)*1000});await refresh();notice('Nastavení uloženo. Skutečné volání ověří rozhodnutí nebo benchmark.',true);
-    });};card.append(form);return card;
-  }));
+  $('vault-state').textContent=state.locked?'Vault je pro tento profil zamčený.':'Vault je odemčený pro tento profil.';if(state.locked||!profile?.vaultEnabled)showVault([]);
+  $('bound').textContent=state.binding?'Připojeno: '+state.binding.origin+' · tab '+state.binding.tabId:'Otevři nebo připoj stránku.';
+  configs=state.configs??configs;controls();
 }
 async function refresh(){
-  try{const available=await rpc('sessions.list');if(!available.some((s:any)=>s.id===selectedSession))selectedSession=available[0]?.id??'panel';const state=await rpc('status');renderStatus(state);if(!state.locked)showVault(await rpc('vault.list'));}catch(e){$('connection').textContent='Lokální host není dostupný';$('connection-dot').classList.remove('online');throw e;}
-  tabs=(await chrome.tabs.query({})).filter(t=>t.id!==undefined&&/^https?:/.test(t.url??''));
+  try{const available=await rpc('sessions.list');if(!available.some((s:any)=>s.id===selectedSession))selectedSession=available[0]?.id??'panel';const state=await rpc('status');renderStatus(state);if(!state.locked&&profile?.vaultEnabled)showVault(await rpc('vault.list'));}catch(e){$('connection').textContent='Lokální host není dostupný';$('connection-dot').classList.remove('online');throw e;}
+  tabs=await rpc('tabs.list');
   const previous=val('tab');$('tab').replaceChildren(...tabs.map(t=>option(String(t.id),t.title||new URL(t.url!).hostname)));if(tabs.some(t=>String(t.id)===previous))$<HTMLSelectElement>('tab').value=previous;
 }
 function inputs(){return {recipe:val('recipe'),fields:val('recipe')==='fill'?JSON.parse(val('fields')):undefined,credentialId:val('recipe')==='login'?(val('credential')||undefined):undefined};}
@@ -84,16 +124,17 @@ function preview(result:any){
 }
 for(const id of ['goal','fields','credential','provider','recipe'])$(id).addEventListener('input',()=>{$('preview').hidden=true;});
 click('refresh',refresh);
-click('profile-save',async()=>{await rpc('profile.update',{name:val('profile-name'),mcpEnabled:$<HTMLInputElement>('mcp-enabled').checked});await refresh();notice('Profil uložený.',true);});
-click('site-grant',async()=>{const origin=exactOrigin(val('site-origin'));if(!await chrome.permissions.request({origins:[origin+'/*']}))throw new Error('site_permission_required');notice(`Přístup povolen: ${origin}`,true);});
 $('session').addEventListener('change',()=>void perform(async()=>{selectedSession=val('session');$('preview').hidden=true;$('snapshot-box').hidden=true;$('outcome').hidden=true;await refresh();}));
 click('session-create',async()=>{const s=await rpc('session.create',{name:val('session-name')||'Nová úloha'});selectedSession=s.id;await refresh();notice('Relace založena. Skupina vznikne otevřením prvního odkazu.',true);});
 click('session-release',async()=>{await rpc('session.release');const s=await rpc('session.create',{name:'Ruční úloha'});selectedSession=s.id;await refresh();notice('Relace uvolněna. Taby zůstaly otevřené.',true);});
-click('open-tab',async()=>{const result=await rpc('tabs.open',{url:val('open-url'),active:false});await refresh();notice(result.grouped===false?'Tab otevřen, skupinu se nepodařilo založit.':'Tab otevřen ve skupině. Po načtení ho vyber a připoj.',result.grouped!==false);});
+click('open-tab',async()=>{
+  const result=await rpc('tabs.open',{url:val('open-url'),active:false});
+  const deadline=Date.now()+15000;let loaded=false;
+  while(Date.now()<deadline){const tab=await chrome.tabs.get(result.tabId);if(tab.status==='complete'&&/^https?:/.test(tab.url??'')){loaded=true;break;}await new Promise(resolve=>setTimeout(resolve,100));}
+  if(!loaded)throw new Error('page_loading');await rpc('pin',{tabId:result.tabId});resetPage();await refresh();notice('Stránka otevřená a připojená.',true);
+});
 click('pin',async()=>{
   const tab=tabs.find(t=>String(t.id)===val('tab'));if(!tab?.url)throw new Error('no_bound_tab');
-  const permissions={origins:[new URL(tab.url).origin+'/*']};
-  const granted=await chrome.permissions.contains(permissions)||await chrome.permissions.request(permissions);if(!granted)throw new Error('site_permission_required');
   const b=await rpc('pin',{tabId:tab.id});$('bound').textContent=`Připojeno: ${b.origin} · tab ${b.tabId}`;$('preview').hidden=true;notice('Stránka připojena. Načti její prvky.',true);
 });
 click('observe',async()=>{const r=await rpc('observe',{recipe:val('recipe')});showSnapshot(r.snapshot);$('preview').hidden=true;notice('Prvky načtené. Hodnoty formuláře se neposílají modelu.',true);});
@@ -105,7 +146,7 @@ click('execute',async()=>{
   notice(result.dispatched?'Klik byl odeslán. Výsledek na webu ověř ručně; automaticky se neopakuje.':'Výsledek lokálního kroku byl ověřen.',true);
 });
 async function stop(){await rpc('cancel');$('preview').hidden=true;notice('Další kroky zastaveny. Již odeslanou akci nelze vzít zpět.');}
-click('stop',stop);click('benchmark-stop',stop);
+click('stop',async()=>{const sessions=await rpc('sessions.list');await Promise.all(sessions.map((s:any)=>chrome.runtime.sendMessage({command:'cancel',payload:{sessionId:s.id}}).then((r:any)=>{if(!r?.ok)throw new Error(r?.code??'native_host_unavailable');})));resetPage();notice('Všechny úlohy v tomto profilu byly zastaveny.',true);});click('benchmark-stop',stop);
 click('unlock',async()=>{const s=await rpc('vault.unlock');renderStatus(s);showVault(s.entries);notice('Vault odemčený.',true);});
 click('lock',async()=>{renderStatus(await rpc('vault.lock'));showVault([]);});
 $('vault-form').addEventListener('submit',e=>{e.preventDefault();void perform(async()=>{
@@ -126,4 +167,5 @@ click('benchmark',async()=>{
 });
 click('export-results',async()=>saveDownload('tabora-browser-benchmark.json',JSON.stringify({version:1,mode:'snapshot-replay-cold-process',createdAt:new Date().toISOString(),summary:summarize(lastRows),rows:lastRows},null,2),'application/json'));
 click('export-table',async()=>saveDownload('tabora-browser-table.csv',table.map(row=>row.map(cell=>`"${(/^[=+@\-\t\r]/.test(cell)?"'":'')+cell.replaceAll('"','""')}"`).join(',')).join('\r\n'),'text/csv;charset=utf-8'));
-void perform(refresh);
+Object.assign(errors,{safe_mode_existing_tab:'Safe dovoluje pouze taby otevřené touto relací v novém okně a skupině.',safe_mode_existing_window:'Safe vytvoří vlastní nové okno.',readonly_mode:'Režim Jen čtení blokuje změny na stránce.',vault_disabled:'Nejprve zapni vault.',page_loading:'Stránka se stále načítá. Zkus připojení znovu.',login_required:'Přihlas se v lokálním klientu poskytovatele.',invalid_connection:'Nepodporovaný způsob připojení.'});
+void perform(async()=>{await refresh();$<HTMLSelectElement>('provider').value=profile?.activeProvider??'agent';renderProvider();if(val('provider')!=='agent')await loadModels();});

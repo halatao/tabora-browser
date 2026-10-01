@@ -4,6 +4,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { PilotError, parseChoice, type DecisionRequest, type ProviderConfig, type DecisionResult } from '../shared.js';
 import type { AdapterResult } from './adapters.js';
+import {sdkEnvironment} from './sdk-environment.js';
 
 export async function decide(config: ProviderConfig, request: DecisionRequest, key: string, stateDir: string, signal: AbortSignal): Promise<DecisionResult> {
   const start=performance.now();
@@ -19,7 +20,8 @@ export async function decide(config: ProviderConfig, request: DecisionRequest, k
       // Only runtime essentials are inherited, never the host's environment secrets.
       const env:Record<string,string>={};
       for(const name of ['PATH','SystemRoot','WINDIR','COMSPEC','PATHEXT','TEMP','TMP']) if(process.env[name])env[name]=process.env[name]!;
-      Object.assign(env,{HOME:directory,USERPROFILE:directory,APPDATA:directory,LOCALAPPDATA:directory});
+      if(config.connection==='sdk')Object.assign(env,sdkEnvironment());
+      else Object.assign(env,{HOME:directory,USERPROFILE:directory,APPDATA:directory,LOCALAPPDATA:directory});
       const child=fork(path.join(import.meta.dirname,'provider-worker.js'),[],{env,cwd:directory,stdio:['ignore','ignore','ignore','ipc'],windowsHide:true,execArgv:[]});
       closed=new Promise(resolve=>child.once('close',()=>resolve()));
       let complete=false, termination:NodeJS.Timeout|undefined;

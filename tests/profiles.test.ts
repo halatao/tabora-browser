@@ -85,3 +85,14 @@ test('disconnect during OS unlock cannot restore the profile grant',async()=>{
     await assert.rejects(operation,{message:'profile_disconnected'});assert.equal((await service.handle(profile,'panel','status',undefined)).locked,true);assert(vault.locked);
   }finally{vault.lock();assert.equal(path.dirname(directory),base);await rm(directory,{recursive:true,force:true});}
 });
+
+test('Disabled vault is enforced by the host even after a previous unlock',async()=>{
+ const f=await fixture(),service=new HostService(f.vault,f.directory),profile=randomUUID();
+ try{
+  await service.handle(profile,'panel','vault.unlock',undefined);
+  for(const command of ['vault.unlock','vault.list','vault.put','credential.use'])await assert.rejects(service.handle(profile,'panel',command,{},false),{message:'vault_disabled'});
+  await service.handle(profile,'panel','vault.lock',undefined,false);
+  assert.equal((await service.handle(profile,'panel','status',undefined,false)).locked,true);
+  await assert.rejects(service.handle(profile,'panel','configure',{provider:'typesafe-jev',model:'test',timeoutMs:30000,connection:'sdk'},false),{message:'invalid_connection'});
+ }finally{await f.cleanup();}
+});

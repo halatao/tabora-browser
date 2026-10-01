@@ -94,14 +94,14 @@ async function worker() {
     await cp(path.join(root, 'dist/extension'), paths.extension, { recursive: true });
     const manifestPath = path.join(paths.extension, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-    manifest.host_permissions = [...new Set(origins.map(x => originPermission(x).pattern))];
+    if(origins.length)manifest.host_permissions = [...new Set(origins.map(x => originPermission(x).pattern))];
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-    context = await chromium.launchPersistentContext(paths.profile, { channel: 'chromium', headless: options.headless, args: [`--disable-extensions-except=${paths.extension}`, `--load-extension=${paths.extension}`], env: { ...process.env, TABORA_STATE_DIR: paths.state } });
+    context = await chromium.launchPersistentContext(paths.profile, { channel: 'chromium', headless: options.headless, args: [`--disable-extensions-except=${paths.extension}`, `--load-extension=${paths.extension}`], env: { ...process.env, TABORA_STATE_DIR: paths.state, TABORA_BROWSER_NAME: options.name } });
     const id = (await readFile(path.join(root, 'extension-id.txt'), 'utf8')).trim();
     const panel = await context.newPage(); await panel.goto(`chrome-extension://${id}/panel.html`);
     await panel.waitForFunction(() => document.querySelector('#connection')?.textContent === 'Lokální host připojený', undefined, { timeout: 30000 });
     const result = await panel.evaluate(async ({ first, name, enable }) => {
-      if (first || enable) return chrome.runtime.sendMessage({ command: 'profile.update', payload: { name, mcpEnabled: true } });
+      if (first || enable) return chrome.runtime.sendMessage({ command: 'profile.update', payload: { name, nameSource:'selected', mcpEnabled: true } });
       const status = await chrome.runtime.sendMessage({ command: 'status' });
       return { ok: status.ok, data: status.data?.profile };
     }, { first: !previous, name: options.name, enable: options.enableMcp });

@@ -40,11 +40,13 @@ const server=createServer(socket=>{
     }
     if(!profile)throw new PilotError('profile_required');
     if(command==='profile.update'){
-      const p=z.object({name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean()}).strict().parse(payload);profile={...profile,...p};router.update(profile);return profile;
+      if(payload?.id&&payload.id!==profile.id)throw new PilotError('profile_scope_mismatch');
+      profile=profileSchema.parse({...profile,...payload,id:profile.id});router.update(profile);return profile;
     }
     if(command!=='host')throw new PilotError('unknown_command');
     const p=z.object({sessionId:z.string().min(1).max(100),command:z.string().max(40),payload:z.unknown().optional()}).strict().parse(payload);
-    return service.handle(profile.id,p.sessionId,p.command,p.payload);
+    if(profile.vaultEnabled===false&&(p.command.startsWith('vault.')&&p.command!=='vault.lock'||p.command==='credential.use'))throw new PilotError('vault_disabled');
+    return service.handle(profile.id,p.sessionId,p.command,p.payload,profile.vaultEnabled!==false);
   };
 });
 function scheduleIdle(){clearTimeout(idle);if(!peers.size)idle=setTimeout(()=>{service.vault.lock();server.close(()=>process.exit(0));},15000);}
