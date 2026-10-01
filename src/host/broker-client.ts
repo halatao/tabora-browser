@@ -6,8 +6,9 @@ import { z } from 'zod';
 import { DpapiProtector } from './vault.js';
 import { connectPipe, type Peer } from './ipc.js';
 import { PilotError } from '../shared.js';
+import { resolveStateDirectory } from '../../scripts/state-directory.mjs';
 
-export const stateDir=path.resolve(process.env.TABORA_STATE_DIR??path.join(process.env.LOCALAPPDATA??'','TaboraBrowser'));
+export const stateDir=resolveStateDirectory(process.env,path.join(import.meta.dirname,'../../dist/native-host/state.json'));
 export function brokerPipe(directory=stateDir){
   const key=createHash('sha256').update(directory.toLowerCase()).digest('hex').slice(0,32);
   return process.platform==='win32'?`\\\\.\\pipe\\tabora-browser-${key}`:path.join(directory,'broker.sock');

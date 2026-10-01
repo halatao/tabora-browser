@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HOST_NAME, PROTOCOL_VERSION, PilotError, safeCode, exactOrigin, profileSchema, type BrowserProfile } from '../shared.js';
 import { createBrowserSession, type BrowserSession } from './session.js';
+import { nativeErrorCode } from './native-errors.js';
 
 let native:chrome.runtime.Port|undefined,connecting:Promise<void>|undefined,profile:BrowserProfile;
 const requests=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
@@ -35,9 +36,11 @@ async function ensureConnected(){
       if(message.ok)req.resolve(message.data);else req.reject(new PilotError(message.code??'host_error'));
     });
     native.onDisconnect.addListener(()=>{
-      void chrome.runtime.lastError;native=undefined;connecting=undefined;
+      const code=nativeErrorCode(chrome.runtime.lastError?.message);
+      if(native!==port)return;
+      native=undefined;connecting=undefined;
       for(const w of sessions.values())w.session.invalidate(false);sessions.clear();owners.clear();
-      for(const req of requests.values()){clearTimeout(req.timer);req.reject(new PilotError('native_host_unavailable'));}requests.clear();
+      for(const req of requests.values()){clearTimeout(req.timer);req.reject(new PilotError(code));}requests.clear();
       // No action is replayed. Reconnect only registers this profile again.
       setTimeout(()=>void ensureConnected().catch(()=>{}),3000);
     });

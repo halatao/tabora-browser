@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { connect } from 'node:net';
+import { resolveStateDirectory } from './state-directory.mjs';
 
 export const root = path.resolve(import.meta.dirname, '..');
 export function profilePaths(name, env = process.env) {
   if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(name) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/.test(name)) throw new Error('Use a profile name with 1–48 lowercase letters, digits or hyphens (not a Windows device name).');
-  if (!env.TABORA_STATE_DIR && !env.LOCALAPPDATA) throw new Error('LOCALAPPDATA is missing.');
-  const state = path.resolve(env.TABORA_STATE_DIR ?? path.join(env.LOCALAPPDATA, 'TaboraBrowser'));
+  const state = resolveStateDirectory(env, path.join(root, 'dist/native-host/state.json'));
   const directory = path.join(state, 'managed', name);
   const hash = createHash('sha256').update(directory.toLowerCase()).digest('hex').slice(0, 32);
   return { state, directory, profile: path.join(directory, 'chromium'), extension: path.join(directory, 'extension'), pipe: `\\\\.\\pipe\\tabora-managed-${hash}` };

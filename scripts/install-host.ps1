@@ -19,6 +19,28 @@ foreach ($pilotBrowser in @('Google\Chrome','Microsoft\Edge','Chromium')) {
     if ($pilotExisting -ne $pilotManifest) { throw 'Tabora native host is registered from another checkout. Uninstall that registration before switching checkouts.' }
   }
 }
+$pilotStateFile = Join-Path $pilotNativeDir 'state.json'
+$pilotRequestedState = $null
+if ($env:TABORA_STATE_DIR) {
+  if (-not [IO.Path]::IsPathRooted($env:TABORA_STATE_DIR)) { throw 'TABORA_STATE_DIR must be absolute.' }
+  $pilotState = $env:TABORA_STATE_DIR
+} elseif (Test-Path -LiteralPath $pilotStateFile) {
+  $pilotStateConfig = Get-Content -LiteralPath $pilotStateFile -Raw | ConvertFrom-Json
+  if ($pilotStateConfig.version -ne 1 -or -not $pilotStateConfig.stateDir -or -not [IO.Path]::IsPathRooted($pilotStateConfig.stateDir)) { throw 'Invalid installed state directory.' }
+  $pilotState = $pilotStateConfig.stateDir
+  if ($pilotStateConfig.requestedStateDir) {
+    if (-not [IO.Path]::IsPathRooted($pilotStateConfig.requestedStateDir)) { throw 'Invalid installed state directory alias.' }
+    $pilotRequestedState = $pilotStateConfig.requestedStateDir
+  }
+} else {
+  if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is missing.' }
+  $pilotState = Join-Path $env:LOCALAPPDATA 'TaboraBrowser'
+}
+New-Item -ItemType Directory -Path $pilotState -Force | Out-Null
+. (Join-Path $PSScriptRoot 'physical-directory.ps1')
+$pilotPhysicalState = Resolve-TaboraPhysicalDirectory $pilotState
+if (-not $pilotRequestedState) { $pilotRequestedState = [IO.Path]::GetFullPath($pilotState) }
+[IO.File]::WriteAllText($pilotStateFile, (@{version=1;stateDir=$pilotPhysicalState;requestedStateDir=$pilotRequestedState} | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 $pilotCommand = '@echo off' + "`r`n" + 'setlocal DisableDelayedExpansion' + "`r`n" + 'chcp 65001 >nul' + "`r`n" + '"' + $pilotNode + '" "' + $pilotMain + '" %*' + "`r`n"
 [IO.File]::WriteAllText($pilotLauncher, $pilotCommand, [Text.UTF8Encoding]::new($false))
 $pilotDefinition = @{
@@ -32,4 +54,5 @@ foreach ($pilotBrowser in @('Google\Chrome','Microsoft\Edge','Chromium')) {
   Set-Item -LiteralPath $pilotRegistry -Value $pilotManifest
 }
 Write-Output "Native host registered for the current Windows user. Extension ID: $pilotId"
+Write-Output "Shared physical state directory: $pilotPhysicalState"
 Write-Output "Unpacked extension directory: $(Join-Path $pilotRoot 'dist\extension')"
