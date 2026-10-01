@@ -79,7 +79,7 @@ The server exposes 13 tools. Typical flow:
 7. `browser_execute` with the returned single-use action ID; inspect the actual result before continuing.
 8. `browser_session_release` releases ownership, leaving tabs open.
 
-`browser_sessions`, `browser_cancel`, and `browser_vault_list` support inspection, cancellation and credential metadata. Each MCP connection owns its sessions; one session owns an attached tab. Different sessions/profiles can work concurrently. Navigation invalidates prepared actions; reattach and observe. Click dispatch is not proof that the website completed the intended operation. Do not automatically retry ambiguous actions.
+`browser_sessions`, `browser_cancel`, and `browser_vault_list` support inspection, cancellation and credential metadata. Each MCP connection owns its sessions; one session owns an attached tab. Different sessions/profiles can work concurrently. Navigation invalidates prepared actions; reattach and observe. If the host restarts, MCP stdio stays alive and reconnects on the next request. Existing sessions are lost; discover the profile and create a new session. In-flight actions fail without automatic replay. Click dispatch is not proof that the website completed the intended operation. Do not automatically retry ambiguous actions.
 
 ## Optional vault and decision providers
 

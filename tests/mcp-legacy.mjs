@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -12,7 +12,12 @@ try{
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
   assert.equal((await call('tools/list',{})).tools.length,13);
   const result=await call('tools/call',{name:'browser_profiles',arguments:{}});assert.deepEqual(JSON.parse(result.content[0].text),[]);
-  console.log('PASS: legacy MCP 2025-03-26 initialize, tools/list and tools/call over real stdio.');
+  const brokerPath=path.resolve('dist/host/broker.js').replaceAll("'","''");
+  const stopScript=`$ownedBroker = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.ParentProcessId -eq ${child.pid} -and $_.CommandLine -like '*${brokerPath}*' }); if ($ownedBroker.Count -ne 1) { throw 'Test broker identity is ambiguous' }; Stop-Process -Id $ownedBroker[0].ProcessId -Force`;
+  execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',stopScript],{windowsHide:true,stdio:'pipe'});
+  await new Promise(resolve=>setTimeout(resolve,300));assert.equal(child.exitCode,null,'Host restart must not close MCP stdio');
+  const reconnected=await call('tools/call',{name:'browser_profiles',arguments:{}});assert(!reconnected.isError);assert.deepEqual(JSON.parse(reconnected.content[0].text),[]);
+  console.log('PASS: legacy MCP 2025-03-26 initialize, tools/list and tools/call over real stdio, including automatic reconnect after broker restart.');
 }finally{
   const closed=new Promise(resolve=>child.once('exit',resolve));child.stdin.end();const timer=setTimeout(()=>child.kill(),5000);await closed;clearTimeout(timer);for(const r of requests.values())clearTimeout(r.timer);
   assert.equal(path.dirname(directory),base);await rm(directory,{recursive:true,force:true,maxRetries:3});
