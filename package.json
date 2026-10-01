@@ -1,0 +1,47 @@
+{
+  "name": "tabora-browser",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "node tests/browser.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:mcp": "node tests/mcp-browser.mjs",
+    "test:mcp-legacy": "node tests/mcp-legacy.mjs",
+    "mcp": "node dist/host/mcp.js",
+    "test:sdk": "tsx tests/sdk-smoke.ts",
+    "check": "npm run typecheck && npm test && npm run test:setup && npm run build",
+    "setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1",
+    "browser": "node scripts/browser.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test:setup": "node --test tests/setup.test.mjs",
+    "test:managed": "node tests/managed.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.285",
+    "@modelcontextprotocol/server": "2.2.0",
+    "@openai/codex-sdk": "0.159.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@types/chrome": "^0.1.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "playwright": "^1.55.0",
+    "tsx": "^4.20.0",
+    "typescript": "7.0.2"
+  },
+  "description": "Local browser control for AI agents: MCP, profile isolation and an optional encrypted vault.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/halatao/tabora-browser.git"
+  }
+}

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.test-state/
+reports/
+preview*.png
+mcp.config.json
+extension-id.txt
+*.log
+.env*
+*.pfx
+*.pem
+*.key
+vault.json
+broker-auth.bin
+.DS_Store
+Thumbs.db

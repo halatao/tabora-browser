@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="cs">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tabora Browser</title><link rel="stylesheet" href="panel.css"></head>
+<body>
+<div class="app">
+  <header><div class="brand"><span class="brand-icon" aria-hidden="true">↗</span><div><h1>Tabora Browser</h1><p>Lokální ovládání. Čtyři způsoby rozhodování.</p></div></div><span class="version">PROTOTYP 0.2</span></header>
+  <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Připojuji lokální host…</span><button id="refresh" class="quiet" aria-label="Obnovit spojení">Obnovit</button></div>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <nav aria-label="Sekce"><button data-view="task" aria-current="page">Úloha</button><button data-view="compare">Srovnání</button><button data-view="settings">Poskytovatelé</button><button data-view="vault">Vault</button></nav>
+
+  <section id="task" class="view">
+    <details class="surface"><summary>Profil a přístup přes MCP</summary>
+      <label for="profile-name">Název tohoto profilu</label><input id="profile-name" maxlength="80">
+      <label class="check"><input id="mcp-enabled" type="checkbox"> Povolit lokálním MCP klientům ovládat tento profil</label>
+      <p class="hint">Klienti mohou pracovat s taby na povolených webech. Vault se odemyká zvlášť v každém profilu.</p>
+      <button id="profile-save" class="secondary">Uložit profil</button><p id="profile-id" class="hint"></p>
+      <label for="site-origin">Povolit web pro MCP</label><div class="inline"><input id="site-origin" type="url" placeholder="https://app.example.com"><button id="site-grant" class="secondary">Povolit web</button></div>
+    </details>
+    <div class="section-heading"><span class="eyebrow">PRACOVNÍ PROSTOR</span><button id="stop" class="stop">Zastavit</button></div>
+    <h2>Další krok pod kontrolou.</h2><p class="intro">Vyber stránku, připrav rozhodnutí a zkontroluj akci před spuštěním.</p>
+    <label for="session">Pracovní relace</label><div class="inline"><select id="session"><option value="panel">Ruční úloha</option></select><button id="session-release" class="quiet">Uvolnit</button></div>
+    <label for="session-name">Nová relace a skupina tabů</label><div class="inline"><input id="session-name" maxlength="80" placeholder="Rešerše"><button id="session-create" class="secondary">Založit</button></div>
+    <label for="open-url">Otevřít odkaz ve skupině této relace</label><div class="inline"><input id="open-url" type="url" placeholder="https://example.com"><button id="open-tab" class="secondary">Otevřít</button></div>
+    <p class="hint">Po načtení nového tabu ho vyber a připoj. Relace MCP lze tady zastavit nebo uvolnit; ovládá je připojený klient.</p>
+    <label for="tab">Stránka</label><div class="inline"><select id="tab"></select><button id="pin" class="secondary when-idle">Připojit</button></div>
+    <p id="bound" class="hint">Přístup se uděluje pouze vybranému webu.</p>
+    <div class="two-col"><div><label for="recipe">Postup</label><select id="recipe"><option value="click">Vybrat a kliknout</option><option value="fill">Vyplnit formulář</option><option value="login">Vyplnit přihlášení</option><option value="extract">Přečíst tabulku</option></select></div><div><label for="provider">Rozhodování</label><select id="provider"></select></div></div>
+    <label for="goal">Co se má vybrat?</label><textarea id="goal" rows="2" placeholder="Například: Vyber formulář kontaktních údajů."></textarea>
+    <div id="fields-group" hidden><label for="fields">Hodnoty polí podle jejich názvů (JSON)</label><textarea id="fields" rows="4" spellcheck="false" placeholder='{"Jméno":"Eva","Město":"Praha"}'></textarea><p class="hint">Běžné údaje se použijí lokálně. Hesla patří do vaultu.</p></div>
+    <div id="credential-group" hidden><label for="credential">Účet z vaultu</label><select id="credential"><option value="">Odemkni vault a vyber účet</option></select><p class="hint">Vyplnění na přesném HTTPS originu. Odeslání a MFA dokončíš na webu.</p></div>
+    <div class="actions"><button id="observe" class="secondary when-idle">1. Načíst prvky</button><button id="decide" class="primary when-idle">2. Nechat rozhodnout <span aria-hidden="true">↗</span></button></div>
+    <div id="snapshot-box" class="surface" hidden><div class="eyebrow">DOSTUPNÉ CÍLE</div><p id="snapshot-info"></p><ol id="targets"></ol><label for="manual-target">Ruční zkušební volba bez modelu</label><div class="inline"><select id="manual-target"></select><button id="manual" class="quiet when-idle">Připravit</button></div></div>
+    <div id="preview" class="surface preview" hidden><span class="eyebrow">KONTROLA AKCE</span><h3 id="preview-title"></h3><p id="preview-info"></p><p class="hint">Klik může odeslat formulář. Vyplnění formuláře se samo neodesílá. Návrh platí 60 sekund.</p><button id="execute" class="primary when-idle">Provést vybranou akci</button></div>
+    <div id="outcome" class="surface" hidden><span class="eyebrow">VÝSLEDEK</span><pre id="outcome-text"></pre><button id="export-table" class="quiet" hidden>Stáhnout tabulku CSV</button></div>
+  </section>
+
+  <section id="compare" class="view" hidden>
+    <span class="eyebrow">STEJNÝ STAV · STEJNÉ MOŽNOSTI</span><h2>Kdo rozhodne nejlépe?</h2><p class="intro">Porovnej všechny čtyři poskytovatele nad posledním načteným stavem. Tento test nic na stránce nevykonává.</p>
+    <div class="two-col"><div><label for="expected">Správná odpověď</label><select id="expected"><option value="">Bez hodnocení správnosti</option></select></div><div><label for="repetitions">Opakování na poskytovatele</label><input id="repetitions" type="number" min="1" max="10" value="1"></div></div>
+    <p class="hint">Test odešle popisy prvků čtyřem poskytovatelům. Spotřebuje jejich API kredit. Měří se čerstvý proces včetně SDK režie a oprav výstupu.</p>
+    <div class="actions"><button id="benchmark" class="primary when-idle">Spustit srovnání</button><button id="benchmark-stop" class="stop">Zastavit</button></div>
+    <div id="benchmark-state" class="hint">Zatím žádné výsledky. Načti nejprve stránku v části Úloha.</div>
+    <div id="benchmark-cards" class="results"></div><button id="export-results" class="secondary" hidden>Stáhnout výsledky JSON</button>
+    <p class="hint">p50/p95 zahrnuje platné odpovědi; chyby se vykazují zvlášť. Cena je odhad SDK, nebo neznámá. Tento replay sám neměří úspěšnost celé browser úlohy.</p>
+  </section>
+
+  <section id="settings" class="view" hidden>
+    <span class="eyebrow">ČTYŘI ADAPTÉRY · JEDEN VYKONAVATEL</span><h2>Vyber podle výsledků.</h2><p class="intro">Modely nastav explicitně podle svého účtu. API klíče se ukládají do lokálního šifrovaného vaultu.</p><div id="provider-cards"></div>
+    <div class="surface"><h3>Decisions API preview</h3><p>Adaptér je viditelný, ale živé volání je blokované, dokud nebude ověřená preview specifikace. Žádný jiný model ho v měření nenahrazuje.</p></div>
+  </section>
+
+  <section id="vault" class="view" hidden>
+    <span class="eyebrow">POUZE NA TOMTO POČÍTAČI</span><h2>Secrets zůstávají lokálně.</h2><p class="intro">Hesla pro weby a API klíče. Modely dostávají pouze podklady k rozhodnutí.</p>
+    <div class="actions"><button id="unlock" class="primary">Odemknout přes Windows</button><button id="lock" class="secondary">Zamknout</button></div><p id="vault-state" class="hint">Vault je zamčený.</p>
+    <p class="hint">Ochrana klíče: Windows DPAPI pod aktuálním uživatelem. Bez biometrického ověření. Automatické zamčení po 10 minutách nečinnosti.</p>
+    <form id="vault-form" class="surface"><h3>Nový webový účet</h3><label for="vault-label">Název účtu</label><input id="vault-label" required maxlength="100" placeholder="Pracovní účet"><label for="vault-scope">Dostupnost účtu</label><select id="vault-scope"><option value="profile">Jen tento profil</option><option value="shared">Sdílený mezi všemi profily</option></select><label for="vault-origin">Přesný HTTPS origin</label><input id="vault-origin" required type="url" placeholder="https://app.example.com"><label for="vault-user">Přihlašovací jméno</label><input id="vault-user" required autocomplete="off"><label for="vault-password">Heslo</label><input id="vault-password" required type="password" autocomplete="new-password"><button class="primary" type="submit">Uložit do vaultu</button></form>
+    <div id="vault-items"></div><p class="hint">Šifrovaná data jsou v uživatelském profilu Windows. Přenos na jiný počítač a cloudová synchronizace nejsou součástí prototypu.</p>
+  </section>
+  <footer>Tabora Browser <span>Lokální prototyp · Windows / Chrome / Edge</span></footer>
+</div><script type="module" src="panel.js"></script>
+</body></html>
