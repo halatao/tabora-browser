@@ -6,6 +6,7 @@ import { Vault, atomicWrite } from './vault.js';
 import { DecisionPool } from './providers.js';
 import {providerCatalog,type ProviderCatalog} from './provider-catalog.js';
 import {exportData} from './export-policy.js';
+import {buildInfo} from '../build-info.js';
 
 const bindingSchema=z.object({tabId:z.number().int().nonnegative(),documentId:z.string().min(1).max(100),origin:z.string().max(2048)}).strict();
 export class HostService {
@@ -42,7 +43,7 @@ export class HostService {
   }
   private status(profile:string){
     const locked=this.locked(profile),keys=locked?[]:this.vault.list(profile).filter(e=>e.kind==='provider').map(e=>e.provider);
-    return {host:HOST_NAME,protocol:PROTOCOL_VERSION,version:'0.5.4',locked,configs:this.configs,
+    return {host:HOST_NAME,protocol:PROTOCOL_VERSION,version:buildInfo.version,build:buildInfo,locked,configs:this.configs,
       providers:this.configs.map(c=>({provider:c.provider,state:c.provider==='openai-decisions'?'preview_unavailable':c.connection==='sdk'?'sdk_available':c.connection==='environment'?this.environmentKey(c.provider)?'configured_unverified':'missing_api_key':locked?'vault_locked':!keys.includes(c.provider)?'missing_api_key':!c.model?'missing_model':this.verified.has(profile+':'+c.provider)?'verified_session':'configured_unverified'}))};
   }
   private environmentKey(provider:string){return provider==='typesafe-jev'?process.env.TYPESAFE_API_KEY??process.env.JEV_API_KEY:undefined;}

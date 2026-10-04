@@ -101,6 +101,38 @@ trigger handoff and the original business predicate must still pass.
 
 ## Internal workflows
 
+All internal runs report `execution.engine: "workflow-v2"`, `contractVersion: 2` and
+`goalPlanning: "grounded-goal"` or `"caller-workflow"`. Panel and MCP share run
+admission. `task` remains accepted for compatibility and never selects another
+executor. Public recipes translate through V2 at the extension boundary.
+
+Raw goals use a bounded grounded grammar for retrieval, all/both checkbox changes,
+exact options, one authorized quoted literal, and bounded ordered clicks with an
+explicit terminal predicate. Unsupported or ambiguous intent fails explicitly;
+see the [capability matrix](capability-matrix.md). Values and instructions from
+page content cannot authorize a write. Other tasks need an explicit workflow or
+individual tools. There is no hidden SDK planner or provider fallback.
+
+Run status includes `phase` and `metrics`: decisions, action dispatch attempts,
+exact reads, calls and time spent in each phase. `maxSteps` bounds decision cycles;
+the final cycle may verify success but cannot dispatch another action. Pending
+raw-goal UI transitions use up to 40 bounded 250 ms observations without a model
+call, inside the overall admission deadline. `run_timeout`, `unsupported_intent`,
+`decision_declined` and `outcome_not_met` are distinct. Unknown writes are never
+replayed. Phase times exclude transport polling and must not be added to the
+operator clock a second time.
+
+`browser_capabilities.build` exposes host/extension version, content fingerprints,
+contract compatibility and `sameBuild`. The extension rejects a missing or
+incompatible host contract and displays reload/update guidance. Compatible
+fingerprint differences remain visible; they do not grant capabilities.
+
+`browser_credential_fill` accepts only an opaque credential ID, observed top-frame
+form ref and state version. The host resolves the enabled, unlocked profile grant
+and exact HTTPS origin; the extension validates the fresh form. The result reports
+fill verification without submission. Password bytes never pass through MCP or
+model context.
+
 The calling agent may execute individual tools, or submit a bounded `workflow`
 to `browser_run_start`. The same executor is used by Codex SDK, Claude SDK and
 Jev. Decisions API remains unavailable until its actual transport is available.
@@ -162,6 +194,26 @@ arguments. Timeout/abort returns unknown; the controller does not replay via the
 site API or UI. No polyfill silently substitutes for native availability.
 
 ## Verification
+
+`browser_session_open` with `waitForReady:true` checks the actual HTTP(S)
+document, completed DOMContentLoaded initialization and matching current URL.
+It does not wait for unfinished images/analytics after the document is usable.
+`readinessTimeoutMs` defaults to 45000, accepts 1000–60000, and should be capped
+by the caller's remaining overall deadline. It never bypasses site permissions,
+redirect scope or browser security pages.
+
+Observed shadow paragraphs include a document-local `shadowRootPath` of root
+ordinals in composed scan order, for open and extension-readable closed roots.
+These are structural evidence, not permanent selectors or access grants. Exact
+paragraph reads retain target/document provenance, including slotted text.
+Bounded raw retrieval can select a paragraph in an explicitly numbered root;
+page-body lines alone cannot prove that structural source.
+
+For supported disappearance goals, completion requires the authorized action
+sequence, complete-scope absence, and a newly visible affirmative standalone
+receipt in the same document. Pre-existing messages, negative wording and
+unrelated prose are rejected. This is a bounded receipt grammar, not unrestricted
+semantic verification; other confirmations need an explicit workflow predicate.
 
 `npm run check` covers types, units, setup and the build. Real extension/MCP
 integration suites: native, managed, mcp, mcp-legacy, files, capabilities,

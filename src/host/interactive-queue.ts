@@ -6,4 +6,4 @@ export class InteractiveQueue{
     try{return await operation();}finally{release();}
   }
 }
-export const interactiveCommands=new Set(['v2.commit','v2.capture','step','execute','files.upload']);
+export const interactiveCommands=new Set(['v2.commit','v2.credential','v2.capture','step','execute','files.upload']);

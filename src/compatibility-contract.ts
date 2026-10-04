@@ -1,0 +1,5 @@
+// Public recipe result types are retained only at the compatibility boundary.
+import type {Binding} from './shared.js';
+export interface PageTarget { id: string; kind: 'link' | 'button' | 'form' | 'table' | 'text' | 'select' | 'file'; name: string; accept?:string; multiple?:boolean; fields?: string[]; section?:string; href?:string; expanded?:boolean; contains?:string[]; containsTruncated?:boolean; preview?:string[][]; rowCount?:number; previewTruncated?:boolean; options?:{index:number;label:string;selected:boolean;disabled:boolean;placeholder?:boolean}[]; optionsTruncated?:boolean; disabled?:boolean; }
+export interface Snapshot { documentToken: string; origin: string; path: string; pageVersion?:string; dataVersion?:string; title?:string; headings?:string[]; text?:string; truncated?:boolean; targets: PageTarget[]; }
+export interface ActionPlan { binding: Binding; snapshot: Snapshot; recipe: 'click' | 'fill' | 'login' | 'extract'; targetId: string; fields?: Record<string, string>; selectOptionIndex?:number; credentialId?: string; }

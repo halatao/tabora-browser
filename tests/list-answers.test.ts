@@ -16,6 +16,11 @@ test('partial, malformed and tied rankings do not claim complete answers',()=>{
  assert.deepEqual(listAnswerFacts('top 2 products',tied,binding),[]);
  assert.deepEqual(listAnswerFacts('top 0 products',snapshot,binding),[]);
 });
+test('currency ranking and numeric ties remain exact beyond floating-point precision',()=>{
+ const amounts={...snapshot,targets:[{...snapshot.targets[0],preview:[['Record','Due'],['Small','$9,007,199,254,740,992.01'],['Large','$9,007,199,254,740,993.01']]}]};
+ assert(listAnswerFacts('top 1 records by Due',amounts,binding).some(f=>f.values?.[0]==='Large'));
+ const tied={...snapshot,targets:[{...snapshot.targets[0],preview:[['Record','Due'],['A','$10.0'],['B','10.00']]}]};assert.deepEqual(listAnswerFacts('top 1 records by Due',tied,binding),[]);
+});
 test('first and last lists preserve explicit row order and scalar tasks get no list candidates',()=>{
  assert.deepEqual(listAnswerFacts('first 2 products',snapshot,binding)[0].values,['Alpha','Beta']);
  assert.deepEqual(listAnswerFacts('last 2 products',snapshot,binding)[0].values,['Delta','Gamma']);
@@ -32,8 +37,9 @@ import {RunController} from '../src/host/run-controller.js';
 test('run status retains a list and its compatible string answer with document evidence',async()=>{
  const controller=new RunController();
  const run=controller.start('owner','profile','session','typesafe-jev','first 2 products',async(command,payload:any)=>{
-  if(command==='status')return {binding};
-  if(command==='observe')return {snapshot};
+  if(command==='v2.frames')return {frames:[{frameId:0,allowed:true}]};
+  if(command==='v2.state')return {binding,stateVersion:'doc:snapshot',snapshot:{schemaVersion:2,snapshotId:'snapshot',epoch:1,origin:snapshot.origin,path:'/',title:'Inventory',targets:[{id:'table',kind:'table',name:'Inventory',visible:true}],coverage:{truncated:false,nextCursor:null},provenance:{source:'page',trust:'untrusted',documentToken:'token'}}};
+  if(command==='v2.read')return {rows:snapshot.targets[0].preview,complete:true,truncated:false,nextOffset:null,provenance:{documentToken:'token'}};
   if(command==='select')return {status:'selected',choiceId:payload.request.choices.find((c:any)=>c.id.startsWith('finish_')&&c.description.includes('Alpha')&&c.description.includes('Beta')).id,latencyMs:1};
   throw Error('unexpected write '+command);
  },{maxSteps:2,timeoutMs:1000,readonly:true,task:true});

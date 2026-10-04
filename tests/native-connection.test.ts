@@ -11,6 +11,7 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
   t.mock.timers.enable({apis:['setTimeout']});
   const originalChrome=globalThis.chrome;
   let failure:string|undefined='Specified native messaging host not found.';
+  let contractVersion=2;
   let panelListener:any,stored:any;
   const sent:string[]=[];
   const ports:{disconnect:()=>void}[]=[];
@@ -27,7 +28,7 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
         sent.push(message.command);
         queueMicrotask(()=>{
           if(failure){runtime.lastError={message:failure};port.disconnect();delete runtime.lastError;}
-          else onMessage({id:message.id,ok:true,data:{}});
+          else onMessage({id:message.id,ok:true,data:message.command==='status'?{build:{contractVersion}}:{}});
         });
       }
     };
@@ -51,10 +52,10 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
     ]){
       failure=message;assert.deepEqual(await rpc(),{ok:false,code});
     }
-    failure=undefined;
+    failure=undefined;contractVersion=1;assert.deepEqual(await rpc(),{ok:false,code:'host_update_required'});contractVersion=2;
     const result=await rpc();assert.equal(result.ok,true);
     assert.equal(result.data.length,1);assert.equal(result.data[0].id,'panel');
-    assert(sent.every(command=>['hello','profile.detect'].includes(command)),'reconnect must not replay browser or vault commands');
+    assert(sent.every(command=>['hello','status','profile.detect'].includes(command)),'reconnect must not replay browser or vault commands');
     assert.equal(stored.mcpEnabled,true);assert.equal(stored.mode,'safe');assert.equal(stored.vaultEnabled,false);
   } finally {
     for(const port of ports)port.disconnect();

@@ -19,12 +19,27 @@ export async function withInteractiveTab<T>(tabId:number,validate:()=>Promise<vo
 /** Subscribe before checking state; loading/complete transitions cannot fall in a gap. */
 export function waitForTab(tabId:number,timeoutMs=10000,requireHttp=false):Promise<void>{
   return new Promise((resolve,reject)=>{
-    const finish=(error?:Error)=>{clearTimeout(timer);chrome.tabs.onUpdated.removeListener(updated);chrome.tabs.onRemoved.removeListener(removed);if(error)reject(error);else resolve();};
-    const check=(tab:chrome.tabs.Tab)=>{if(tab.status==='complete'&&(!requireHttp||/^https?:/.test(tab.url??'')))finish();};
-    const updated=(id:number,change:chrome.tabs.OnUpdatedInfo)=>{if(id!==tabId)return;if(requireHttp)void chrome.tabs.get(tabId).then(check,()=>finish(new PilotError('tab_closed')));else if(change.status==='complete')finish();};
+    let finished=false,probing=false;
+    const finish=(error?:Error)=>{if(finished)return;finished=true;clearTimeout(timer);clearInterval(poll);chrome.tabs.onUpdated.removeListener(updated);chrome.tabs.onRemoved.removeListener(removed);if(error)reject(error);else resolve();};
+    const check=async(tab:chrome.tabs.Tab)=>{
+      if(finished||tab.pendingUrl&&tab.pendingUrl!==tab.url)return;
+      if(!/^https?:/.test(tab.url??'')){if(!requireHttp&&tab.status==='complete')finish();return;}
+      if(probing)return;
+      probing=true;
+      try{
+        // DOM readiness is enough to bind. Slow images/analytics must not hold
+        // a usable document hostage; script injection still requires a grant.
+        const [result]=await chrome.scripting.executeScript({target:{tabId,frameIds:[0]},world:'ISOLATED',func:()=>({ready:!!document.body&&(document.readyState==='complete'||((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming|undefined)?.domContentLoadedEventEnd??0)>0),href:location.href})});
+        if(result?.result?.ready&&result.result.href===tab.url&&!finished){const live=await chrome.tabs.get(tabId);if(live.url===tab.url&&(!live.pendingUrl||live.pendingUrl===live.url))finish();}
+      }catch{/* A denied, missing or still navigating document is not ready. */}
+      finally{probing=false;}
+    };
+    const probe=()=>void chrome.tabs.get(tabId).then(check,()=>finish(new PilotError('tab_closed')));
+    const updated=(id:number)=>{if(id===tabId)probe();};
     const removed=(id:number)=>{if(id===tabId)finish(new PilotError('tab_closed'));};
     const timer=setTimeout(()=>finish(new PilotError('readiness_timeout')),timeoutMs);
+    const poll=setInterval(probe,100);
     chrome.tabs.onUpdated.addListener(updated);chrome.tabs.onRemoved.addListener(removed);
-    void chrome.tabs.get(tabId).then(check,()=>finish(new PilotError('tab_closed')));
+    probe();
   });
 }

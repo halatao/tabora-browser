@@ -10,7 +10,7 @@ import { HostService } from './service.js';
 import { BrokerRouter } from './broker-router.js';
 import { PilotError, profileSchema, type BrowserProfile } from '../shared.js';
 import type { BrowserTool } from '../browser-api.js';
-import {runOptions} from '../browser-api.js';
+import {admitRun} from './run-admission.js';
 import {RunController} from './run-controller.js';
 import {ArtifactStore,type FileScope} from './artifacts.js';
 import {fileBeginSchema,fileChunkSchema,fileFinishSchema} from '../file-contract.js';
@@ -74,11 +74,9 @@ const server=createServer(socket=>{
       throw new PilotError('unknown_command');
     }
     if(p.command==='run.start'){
-      const input=z.object(runOptions).strict().parse(p.payload),preferred=profile.activeProvider??'agent';
-      if(preferred==='agent')throw new PilotError('decision_provider_required');
-      if(input.provider&&input.provider!==preferred)throw new PilotError('provider_preference_mismatch');
+      const admitted=admitRun(p.payload,profile.activeProvider,profile.mode==='readonly');
       const profileId=profile.id;
-      return router.runs.start(owner,profileId,p.sessionId,preferred,input.goal,(command,input)=>router.workflowCall({owner,profileId,sessionId:p.sessionId},(command,payload)=>router.execute(command,()=>peer.call('browser',{source:'controller',command,payload})),command,input),{maxSteps:input.maxSteps,timeoutMs:input.timeoutMs,readonly:profile.mode==='readonly',task:input.task,workflow:input.workflow});
+      return router.runs.start(owner,profileId,p.sessionId,admitted.provider,admitted.goal,(command,input)=>router.workflowCall({owner,profileId,sessionId:p.sessionId},(command,payload)=>router.execute(command,()=>peer.call('browser',{source:'controller',command,payload})),command,input),admitted.options);
     }
     if(p.command==='run.status'||p.command==='run.cancel'){
       const input=z.object({runId:z.string().uuid()}).strict().parse(p.payload);

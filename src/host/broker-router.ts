@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PilotError, imageDecisionCapability, type BrowserProfile } from '../shared.js';
 import { toolDefinitions, workflowFileSchema, type BrowserTool } from '../browser-api.js';
 import {RunController} from './run-controller.js';
+import {admitRun} from './run-admission.js';
 import {ArtifactStore,type FileScope} from './artifacts.js';
 import {fileCommands} from '../file-contract.js';
 import {readDocument} from './documents.js';
@@ -109,7 +110,7 @@ export class BrokerRouter {
     const c=this.connection(s.profileId),{sessionId,...payload}=p;
     if(tool==='browser_capabilities'){
       const result=await c.call('v2.capabilities',{sessionId}),status=await c.call('status',{sessionId}),config=status.configs.find((item:any)=>item.provider===c.profile.activeProvider);
-      return {...result,capabilities:{...result.capabilities,vision:config?{...imageDecisionCapability(config),provider:config.provider,model:config.model}:{status:'external_agent',reason:'caller_supplies_vision'}}};
+      return {...result,build:{host:status.build,extension:status.extensionBuild,compatible:status.build?.contractVersion===status.extensionBuild?.contractVersion,sameBuild:status.build?.fingerprint===status.extensionBuild?.fingerprint},capabilities:{...result.capabilities,vision:config?{...imageDecisionCapability(config),provider:config.provider,model:config.model}:{status:'external_agent',reason:'caller_supplies_vision'}}};
     }
     if(tool==='browser_image_view'){
       if(!this.files)throw new PilotError('files_unavailable');const scope={owner,profileId:s.profileId,sessionId},{bytes,meta}=await this.files.bytes(scope,p.artifactId,20000000);
@@ -149,12 +150,11 @@ export class BrokerRouter {
       finally{this.files.endTicket(upload.ticket);}
     }
     if(tool==='browser_run_start'){
-      const preferred=c.profile.activeProvider??'agent';
-      if(preferred!=='agent'&&p.provider&&p.provider!==preferred)throw new PilotError('provider_preference_mismatch');
-      const provider=p.provider??preferred;if(provider==='agent')throw new PilotError('decision_provider_required');
-      return this.runs.start(owner,s.profileId,sessionId,provider,p.goal,(command,input)=>this.workflowCall({owner,profileId:s.profileId,sessionId},c.call,command,input),{maxSteps:p.maxSteps,timeoutMs:p.timeoutMs,readonly:c.profile.mode==='readonly',task:p.task,workflow:p.workflow});
+      const admitted=admitRun(payload,c.profile.activeProvider,c.profile.mode==='readonly');
+      return this.runs.start(owner,s.profileId,sessionId,admitted.provider,admitted.goal,(command,input)=>this.workflowCall({owner,profileId:s.profileId,sessionId},c.call,command,input),admitted.options);
     }
     if(tool!=='browser_cancel'&&this.runs.active(s.profileId,sessionId))throw new PilotError('run_active');
+    if(tool==='browser_credential_fill')return c.call('v2.credential',{sessionId,...payload});
     const commands:Partial<Record<BrowserTool,string>>={browser_site_tools:'v2.site_tools',browser_site_call:'v2.site_call',browser_popups:'popups.list',browser_handoff:'v2.handoff',browser_resume:'v2.resume',browser_capabilities:'v2.capabilities',browser_frames:'v2.frames',browser_state:'v2.state',browser_read:'v2.read',browser_plan:'v2.plan',browser_commit:'v2.commit',browser_session_attach:'pin',browser_session_open:'tabs.open',browser_observe:'observe',browser_decide:'decide',browser_prepare:'manual',browser_execute:'execute',browser_step:'step',browser_cancel:'cancel'};
     return c.call(commands[tool]!,{sessionId,...payload});
   }

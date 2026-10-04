@@ -2,15 +2,15 @@ import type {FileMetadata} from '../file-contract.js';
 
 export type FilePageInput={op:'start'|'chunk'|'seal'|'commit'|'abort';version?:2;transferId:string;origin:string;token:string;targetId:string;files?:FileMetadata[];index?:number;offset?:number;data?:string;accept?:string;multiple?:boolean};
 
-/** Fixed executor serialized in the same ISOLATED world as pageOperation. No path or arbitrary JS. */
+/** Fixed executor serialized in the canonical sensor's ISOLATED world. No path or arbitrary JS. */
 export async function fileOperation(input:FilePageInput):Promise<any>{
   type Transfer={id:string;token:string;el:HTMLInputElement;files:FileMetadata[];chunks:Uint8Array[][];offsets:number[];created:number;accept:string;multiple:boolean;sealed?:FileList};
   type FileRegistry={token:string;entries:Map<string,{el:Element;kind?:string;target?:{kind:string}}>;resolve?:(id:string,write:boolean)=>{el:Element;kind?:string;target:{kind:string}}};
-  const world=globalThis as typeof globalThis&{__browserPilot?:FileRegistry;__taboraSensor?:{registry:FileRegistry};__taboraFileTransfer?:Transfer};
+  const world=globalThis as typeof globalThis&{__taboraSensor?:{registry:FileRegistry};__taboraFileTransfer?:Transfer};
   try{
     if(input.op==='abort'){if(world.__taboraFileTransfer?.id===input.transferId)world.__taboraFileTransfer=undefined;return {ok:true};}
-    const state=input.version===2?world.__taboraSensor?.registry:world.__browserPilot,entry=state?.resolve?state.resolve(input.targetId,true):state?.entries.get(input.targetId);
-    const live=()=>input.version===2?world.__taboraSensor?.registry===state:world.__browserPilot===state;
+    const state=world.__taboraSensor?.registry,entry=state?.resolve?.(input.targetId,true);
+    const live=()=>world.__taboraSensor?.registry===state;
     if(location.origin!==input.origin||!state||state.token!==input.token||!entry||(entry.kind??entry.target?.kind)!=='file'||!(entry.el instanceof HTMLInputElement)||entry.el.type!=='file')throw new Error('stale_snapshot');
     const el=entry.el;
     if(!el.isConnected)throw new Error('stale_snapshot');
@@ -51,5 +51,5 @@ export async function fileOperation(input:FilePageInput):Promise<any>{
     el.files=t.sealed;
     el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
     return {ok:true,dispatch:'sent',attachmentState:'selected',businessOutcomeVerified:false,files:t.files.map(({id,name,size,sha256})=>({id,name,size,sha256}))};
-  }catch(error){world.__taboraFileTransfer=undefined;return {ok:false,code:error instanceof Error?error.message:'file_operation_failed'};}
+  }catch(error){world.__taboraFileTransfer=undefined;return {ok:false,code:error instanceof Error?(error.message==='stale_reference'?'stale_snapshot':error.message):'file_operation_failed'};}
 }

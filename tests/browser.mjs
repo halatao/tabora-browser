@@ -71,7 +71,7 @@ try {
   // A rerender between observation and execution must invalidate the target.
   await panel.locator('#observe').click();await panel.locator('#manual').click();
   await fixture.evaluate(()=>{const el=document.getElementById('profile');el.replaceWith(el.cloneNode(true));});
-  await panel.locator('#execute').click();await panel.waitForFunction(()=>document.querySelector('#notice').textContent.includes('target_not_ready'));
+  await panel.locator('#execute').click();await panel.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Znovu načti prvky'));
   // Table extraction is local and bounded.
   await panel.locator('#recipe').selectOption('extract');await panel.locator('#observe').click();await panel.locator('#manual').click();await panel.locator('#execute').click();
   await panel.waitForFunction(()=>document.querySelector('#outcome-text').textContent.includes('42'));

@@ -72,10 +72,9 @@ export function exactOrigin(value: string, secure = false): string {
   if (!['http:', 'https:'].includes(u.protocol) || (secure && u.protocol !== 'https:') || u.username || u.password) throw new PilotError('invalid_origin');
   return u.origin;
 }
-export interface PageTarget { id: string; kind: 'link' | 'button' | 'form' | 'table' | 'text' | 'select' | 'file'; name: string; accept?:string; multiple?:boolean; fields?: string[]; section?:string; href?:string; expanded?:boolean; contains?:string[]; containsTruncated?:boolean; preview?:string[][]; rowCount?:number; previewTruncated?:boolean; options?:{index:number;label:string;selected:boolean;disabled:boolean;placeholder?:boolean}[]; optionsTruncated?:boolean; disabled?:boolean; }
-export interface Snapshot { documentToken: string; origin: string; path: string; pageVersion?:string; dataVersion?:string; title?:string; headings?:string[]; text?:string; truncated?:boolean; targets: PageTarget[]; }
 export interface Binding { tabId: number; documentId: string; origin: string; }
-export interface ActionPlan { binding: Binding; snapshot: Snapshot; recipe: 'click' | 'fill' | 'login' | 'extract'; targetId: string; fields?: Record<string, string>; selectOptionIndex?:number; credentialId?: string; }
+export type {PageTarget,Snapshot,ActionPlan} from './compatibility-contract.js';
+import type {Snapshot,ActionPlan} from './compatibility-contract.js';
 export const idSchema = z.string().uuid();
 export const browserMode=z.enum(['safe','takeover','readonly']);
 export const profileSchema = z.object({id:idSchema,name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean(),

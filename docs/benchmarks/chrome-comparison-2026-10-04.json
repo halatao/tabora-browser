@@ -1,0 +1,708 @@
+{
+  "classification": "live_chrome_online_compatibility_comparison",
+  "date": "2026-10-04",
+  "build": {
+    "version": "0.5.5",
+    "fingerprint": "3c6ff624a6094c6fd342a24ca51519daa215d10ec9614576e916ad044c7bbee8",
+    "contractVersion": 2
+  },
+  "protocol_hash": "2cd00b61397f2107392d4c93a9f3f18a3e6d670c3110312b8f4f2145be564368",
+  "scorer_sha256": "c23add7a86505577c01a08328c88b86975ce76fd0a8a75279564c9e419f325f5",
+  "environment": {
+    "official": "Installed official Chrome extension via CUA + calling Codex agent, browser 3",
+    "tabora": "Installed Tabora in normal Chrome Ondrej profile via MCP, Safe mode",
+    "same_profile_attested": false,
+    "headless": false,
+    "vault_used": false
+  },
+  "order": "Official lane completed in preceding turn; Tabora configurations rotated per task afterward",
+  "repetitions": 1,
+  "deadline_ms": 120000,
+  "excluded": [
+    "I09 previous upstream editor quota exclusion retained; not rechecked in this rerun"
+  ],
+  "summaries": [
+    {
+      "configuration": "official",
+      "strict_success": 9,
+      "tasks": 9,
+      "mean_seconds": 15.065,
+      "mean_penalized_seconds": 15.065
+    },
+    {
+      "configuration": "jev",
+      "strict_success": 9,
+      "tasks": 9,
+      "mean_seconds": 2.927,
+      "mean_penalized_seconds": 2.927
+    },
+    {
+      "configuration": "luna",
+      "strict_success": 9,
+      "tasks": 9,
+      "mean_seconds": 7.233,
+      "mean_penalized_seconds": 7.233
+    }
+  ],
+  "episodes": [
+    {
+      "task": "I01",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 6995,
+      "penalized_ms": 6995,
+      "evidence_sha256": "aec6fdcdc521fa679a01100fe2d103ef0ed5acdc598a0c0cd5cb849931b96736"
+    },
+    {
+      "task": "I01",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 1484,
+      "penalized_ms": 1484,
+      "evidence_sha256": "58c956860a0b9f4d70b92d6464e25679edd3e35985cf1372b73744f2beaa4503",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 149,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 3,
+        "calls": 6,
+        "timeMs": {
+          "observation": 46,
+          "verification": 18,
+          "decision": 687
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I01",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 4625,
+      "penalized_ms": 4625,
+      "evidence_sha256": "d88f6f616706448fb815217d792737dc7a3821b60e66892cf2bd7c6a45f3381a",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 74,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 3,
+        "calls": 6,
+        "timeMs": {
+          "observation": 80,
+          "verification": 37,
+          "decision": 3985
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I02",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 7618,
+      "penalized_ms": 7618,
+      "evidence_sha256": "ec568f368c0103bda617ef788403f64799a0232971e91b5b159ceb7442c556bc"
+    },
+    {
+      "task": "I02",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 1328,
+      "penalized_ms": 1328,
+      "evidence_sha256": "0faf9d0e8af232a8a39f04a42065bace55334abb652244414c9a7ab179b56fb1",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 123,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 3,
+        "calls": 6,
+        "timeMs": {
+          "observation": 68,
+          "verification": 17,
+          "decision": 704
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I02",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 5187,
+      "penalized_ms": 5187,
+      "evidence_sha256": "d8c071b960662570acc6251bcc280925062ce38aadc991ff72b95b0964463a31",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 111,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 3,
+        "calls": 6,
+        "timeMs": {
+          "observation": 99,
+          "verification": 37,
+          "decision": 4499
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I03",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 10444,
+      "penalized_ms": 10444,
+      "evidence_sha256": "2288ed8092e4b37e8998ca98397020db8b69ea56bd7bdb601a21e7c924a888ea"
+    },
+    {
+      "task": "I03",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 1218,
+      "penalized_ms": 1218,
+      "evidence_sha256": "9ad023b732abf0cef0a24d48d8df2c4dd7dcaf41f57e92bdac1b11a5b089a28f",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 80,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 0,
+        "calls": 7,
+        "timeMs": {
+          "observation": 76,
+          "decision": 654,
+          "planning": 5,
+          "dispatch": 38
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I03",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 5125,
+      "penalized_ms": 5125,
+      "evidence_sha256": "eb0f0f53702969bceccf4551150de523108968528848f6211da85ed4e84d8715",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 75,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 0,
+        "calls": 7,
+        "timeMs": {
+          "observation": 101,
+          "decision": 4197,
+          "planning": 3,
+          "dispatch": 39
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I04",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 10630,
+      "penalized_ms": 10630,
+      "evidence_sha256": "a365f8c638fb781a2e4aa779aab4af1fccd69e44469cb7a24560096afe91da8f"
+    },
+    {
+      "task": "I04",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 1406,
+      "penalized_ms": 1406,
+      "evidence_sha256": "9899371277e942e608ac59b4070b2b706b00c85d60d72e588e789d327d7fb7c5",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 70,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 0,
+        "calls": 7,
+        "timeMs": {
+          "observation": 84,
+          "decision": 842,
+          "planning": 2,
+          "dispatch": 22
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I04",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 4016,
+      "penalized_ms": 4016,
+      "evidence_sha256": "28fd32d8e6115b4277009320a21ea7fe60c4b1d24d800bf388a317844296bc0e",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 94,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 0,
+        "calls": 7,
+        "timeMs": {
+          "observation": 49,
+          "decision": 3553,
+          "planning": 7,
+          "dispatch": 34
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I05",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 17036,
+      "penalized_ms": 17036,
+      "evidence_sha256": "680068ec97aa17667ffa12b6932984d7b87a29269e37ea254ab5b3ec66560f70"
+    },
+    {
+      "task": "I05",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 4516,
+      "penalized_ms": 4516,
+      "evidence_sha256": "c9175628b27c47ada050954c6f4dd5dcef8bc603aaf0e235670e91f5da15e5a3",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 112,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 13,
+        "calls": 42,
+        "timeMs": {
+          "observation": 273,
+          "verification": 2933,
+          "decision": 745,
+          "planning": 8,
+          "dispatch": 68
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I05",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 7625,
+      "penalized_ms": 7625,
+      "evidence_sha256": "82e2333e925492f66d5b822f2bce6d57a41a7f5250ab88dde3eb9efada9c5afe",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 106,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 13,
+        "calls": 42,
+        "timeMs": {
+          "observation": 327,
+          "verification": 2928,
+          "decision": 3722,
+          "planning": 7,
+          "dispatch": 30
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I06",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 26474,
+      "penalized_ms": 26474,
+      "evidence_sha256": "b0bfb47c70f7fe24be24748838a65d5428c4dd642a172498369da04bfb9d50f8"
+    },
+    {
+      "task": "I06",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 5235,
+      "penalized_ms": 5235,
+      "evidence_sha256": "7a794b48fed849f0928dcb563c8b9174481c9f85359212c049552f9cf82b7b04",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 133,
+      "metrics": {
+        "decisions": 2,
+        "actions": 2,
+        "reads": 0,
+        "calls": 34,
+        "timeMs": {
+          "observation": 479,
+          "decision": 1393,
+          "planning": 18,
+          "dispatch": 123,
+          "verification": 2814
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I06",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 11235,
+      "penalized_ms": 11235,
+      "evidence_sha256": "bff1755d1ec61a47dcca93cdcfa7dd52d47b64688ba444c44263852401a37bc8",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 72,
+      "metrics": {
+        "decisions": 2,
+        "actions": 2,
+        "reads": 0,
+        "calls": 34,
+        "timeMs": {
+          "observation": 360,
+          "decision": 7525,
+          "planning": 6,
+          "dispatch": 65,
+          "verification": 2836
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I07",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 21816,
+      "penalized_ms": 21816,
+      "evidence_sha256": "20e6ae977840329a2ebc470b20a9b7c7ef0c2adde7fc6c840b7303f3be91bc6e"
+    },
+    {
+      "task": "I07",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 6672,
+      "penalized_ms": 6672,
+      "evidence_sha256": "936cdce8b2ab18a67d9fbbadce1a695919e157cf76f5733fb55770c3155fd617",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 120,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 19,
+        "calls": 62,
+        "timeMs": {
+          "observation": 478,
+          "decision": 800,
+          "planning": 5,
+          "dispatch": 39,
+          "verification": 4808
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I07",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 9813,
+      "penalized_ms": 9813,
+      "evidence_sha256": "ec22b56607070350f591ff87e303e4d8005a80ad3441077d27a9b0764007f74e",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 84,
+      "metrics": {
+        "decisions": 1,
+        "actions": 1,
+        "reads": 19,
+        "calls": 62,
+        "timeMs": {
+          "observation": 377,
+          "decision": 4196,
+          "planning": 9,
+          "dispatch": 44,
+          "verification": 4800
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I08",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 21602,
+      "penalized_ms": 21602,
+      "evidence_sha256": "89872357d5c162f6241a211406a9a0ecaa311e3a182737d1b1932db66227b6e0"
+    },
+    {
+      "task": "I08",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 2907,
+      "penalized_ms": 2907,
+      "evidence_sha256": "82fc748a4e65d23dd434c9b44ec69743acf83782ede906d3987df7709abaf833",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 88,
+      "metrics": {
+        "decisions": 3,
+        "actions": 3,
+        "reads": 0,
+        "calls": 21,
+        "timeMs": {
+          "observation": 182,
+          "decision": 1478,
+          "planning": 23,
+          "dispatch": 171,
+          "verification": 514
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I08",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 13625,
+      "penalized_ms": 13625,
+      "evidence_sha256": "4677c4e46077385180d127589f292b6ca87afeee8cb7f366dd12a9fa4882a652",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 115,
+      "metrics": {
+        "decisions": 3,
+        "actions": 3,
+        "reads": 0,
+        "calls": 19,
+        "timeMs": {
+          "observation": 117,
+          "decision": 12713,
+          "planning": 10,
+          "dispatch": 159,
+          "verification": 257
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I10",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 12971,
+      "penalized_ms": 12971,
+      "evidence_sha256": "67a5da21958cc29391f5ae51d7c388ca6ae6d9783b1df3f7ebf28c8295b610be"
+    },
+    {
+      "task": "I10",
+      "configuration": "jev",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 1578,
+      "penalized_ms": 1578,
+      "evidence_sha256": "729a4b33e0ec2b10735d63684d41aefdfba5627c21335b59cfd8a27474d194af",
+      "code": null,
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "cleanup_ms": 105,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 1,
+        "calls": 4,
+        "timeMs": {
+          "observation": 81,
+          "verification": 7,
+          "decision": 975
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    },
+    {
+      "task": "I10",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 3844,
+      "penalized_ms": 3844,
+      "evidence_sha256": "91611f3f5f9f092621534e43a734a74954ea9b44ede2d88303c72826251bf984",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "cleanup_ms": 117,
+      "metrics": {
+        "decisions": 1,
+        "actions": 0,
+        "reads": 1,
+        "calls": 4,
+        "timeMs": {
+          "observation": 47,
+          "verification": 5,
+          "decision": 3394
+        }
+      },
+      "execution": {
+        "engine": "workflow-v2",
+        "contractVersion": 2,
+        "goalPlanning": "grounded-goal"
+      }
+    }
+  ],
+  "limitations": [
+    "The Internet pages externally maintained; goals and scorer locally authored. Not independent WebArena.",
+    "Same Chrome profile and equal browser caches are not attested.",
+    "Official uses calling-agent orchestration; Tabora uses internal provider controller.",
+    "Official backend model is not attested.",
+    "Tasks development-exposed, one repetition, no production-stability or universal speed claim.",
+    "Official AX verification exists in tool transcript; not separately persisted as episode AX evidence.",
+    "I06 official timing includes a progress update."
+  ]
+}

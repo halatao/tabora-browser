@@ -1,0 +1,668 @@
+{
+  "protocol": {
+    "classification": "online_compatibility_pilot",
+    "date": "2026-10-04",
+    "deadline_seconds": 120,
+    "repetitions": 1,
+    "tasks": [
+      {
+        "id": "I01",
+        "url": "https://the-internet.herokuapp.com/tables",
+        "goal": "Return the email address of John Smith from Example 1."
+      },
+      {
+        "id": "I02",
+        "url": "https://the-internet.herokuapp.com/tables",
+        "goal": "Return the top 2 last names ranked by Due descending from Example 1."
+      },
+      {
+        "id": "I03",
+        "url": "https://the-internet.herokuapp.com/dropdown",
+        "goal": "Select Option 2 in the dropdown. Finish once Option 2 is selected."
+      },
+      {
+        "id": "I04",
+        "url": "https://the-internet.herokuapp.com/checkboxes",
+        "goal": "Check both checkboxes. Finish once both are checked."
+      },
+      {
+        "id": "I05",
+        "url": "https://the-internet.herokuapp.com/dynamic_controls",
+        "goal": "Click Remove in the Remove/add section and wait until the checkbox disappears and the page confirms that it is gone."
+      },
+      {
+        "id": "I06",
+        "url": "https://the-internet.herokuapp.com/dynamic_controls",
+        "goal": "Enable the disabled text input and enter \"Tabora test\" into it. Finish once the enabled input contains that exact text."
+      },
+      {
+        "id": "I07",
+        "url": "https://the-internet.herokuapp.com/dynamic_loading/2",
+        "goal": "Click Start and wait until Hello World! becomes visible."
+      },
+      {
+        "id": "I08",
+        "url": "https://the-internet.herokuapp.com/add_remove_elements/",
+        "goal": "Click Add Element twice, then delete one of the new elements. Finish with exactly one Delete button remaining."
+      },
+      {
+        "id": "I09",
+        "url": "https://the-internet.herokuapp.com/iframe",
+        "goal": "Replace the text in the iframe editor with \"Tabora test\". Finish once the editor contains that exact text."
+      },
+      {
+        "id": "I10",
+        "url": "https://the-internet.herokuapp.com/shadowdom",
+        "goal": "Read the paragraph in the first shadow root and return its text."
+      }
+    ],
+    "schedule": [
+      {
+        "episode": "I01-official",
+        "task": "I01",
+        "configuration": "official"
+      },
+      {
+        "episode": "I01-jev",
+        "task": "I01",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I01-luna",
+        "task": "I01",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I02-jev",
+        "task": "I02",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I02-luna",
+        "task": "I02",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I02-official",
+        "task": "I02",
+        "configuration": "official"
+      },
+      {
+        "episode": "I03-luna",
+        "task": "I03",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I03-official",
+        "task": "I03",
+        "configuration": "official"
+      },
+      {
+        "episode": "I03-jev",
+        "task": "I03",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I04-official",
+        "task": "I04",
+        "configuration": "official"
+      },
+      {
+        "episode": "I04-jev",
+        "task": "I04",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I04-luna",
+        "task": "I04",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I05-jev",
+        "task": "I05",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I05-luna",
+        "task": "I05",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I05-official",
+        "task": "I05",
+        "configuration": "official"
+      },
+      {
+        "episode": "I06-luna",
+        "task": "I06",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I06-official",
+        "task": "I06",
+        "configuration": "official"
+      },
+      {
+        "episode": "I06-jev",
+        "task": "I06",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I07-official",
+        "task": "I07",
+        "configuration": "official"
+      },
+      {
+        "episode": "I07-jev",
+        "task": "I07",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I07-luna",
+        "task": "I07",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I08-jev",
+        "task": "I08",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I08-luna",
+        "task": "I08",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I08-official",
+        "task": "I08",
+        "configuration": "official"
+      },
+      {
+        "episode": "I09-luna",
+        "task": "I09",
+        "configuration": "luna"
+      },
+      {
+        "episode": "I09-official",
+        "task": "I09",
+        "configuration": "official"
+      },
+      {
+        "episode": "I09-jev",
+        "task": "I09",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I10-official",
+        "task": "I10",
+        "configuration": "official"
+      },
+      {
+        "episode": "I10-jev",
+        "task": "I10",
+        "configuration": "jev"
+      },
+      {
+        "episode": "I10-luna",
+        "task": "I10",
+        "configuration": "luna"
+      }
+    ],
+    "configurations": {
+      "official": "official Chrome extension driven by this external calling agent; backend unattested",
+      "jev": "Tabora raw-goal controller, jev-latest, no fallback",
+      "luna": "Tabora raw-goal controller, gpt-6-luna, no fallback"
+    },
+    "goal_success": "operator judges terminal response or observed page state",
+    "strict_success": "goal success AND completed controller/agent status",
+    "limits": [
+      "shared existing Chrome profile",
+      "single repetition",
+      "externally authored pages, locally authored task protocol",
+      "operator captures terminal state using candidate observation",
+      "external agent has prior context; no unseen-task claim"
+    ],
+    "sha256": "2cd00b61397f2107392d4c93a9f3f18a3e6d670c3110312b8f4f2145be564368"
+  },
+  "episodes": [
+    {
+      "task": "I01",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 19266,
+      "penalized_ms": 19266,
+      "evidence_sha256": "973abfdb4af0c7d50f7f5a64d13af02e7d1c1030ee5e237b4b047de1407f830c",
+      "included": true
+    },
+    {
+      "task": "I01",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 10078,
+      "penalized_ms": 120000,
+      "evidence_sha256": "3aa6de789b159a578fa4c1ca753d9822c69ee728338f6dd572d4baac21f9cccd",
+      "code": "readiness_timeout",
+      "actual_model": null,
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I01",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 5000,
+      "penalized_ms": 5000,
+      "evidence_sha256": "fbc7921d9f03c13d7911a2530be20d5d2c5eafdc245bce424fee0c59f3041559",
+      "code": null,
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I02",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 19812,
+      "penalized_ms": 19812,
+      "evidence_sha256": "c46359efdd18a06ad7563568bddd54517fa47fb66ed08adeb61dc1d8dee5e894",
+      "included": true
+    },
+    {
+      "task": "I02",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 3328,
+      "penalized_ms": 120000,
+      "evidence_sha256": "601e7a2555787ea8eee2b37fbb1c2bd31174c33cddc9c6169191869277dd4b09",
+      "code": "ask_user",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I02",
+      "configuration": "luna",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 11657,
+      "penalized_ms": 120000,
+      "evidence_sha256": "5da8e4c2f84127895398c73103fc54d4834934d49d8f841d5322b398246d85a8",
+      "code": "ask_user",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I03",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 25750,
+      "penalized_ms": 25750,
+      "evidence_sha256": "5e77eef88abed5faa35c2ed3d7366336a706828e6c7a8cdc56d6c505f7ab6570",
+      "included": true
+    },
+    {
+      "task": "I03",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 11563,
+      "penalized_ms": 120000,
+      "evidence_sha256": "0deb942213f47f2c22409a99c9476ad1f7318822cadb2c3d691647d2965275ec",
+      "code": "step_limit",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I03",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 28890,
+      "penalized_ms": 120000,
+      "evidence_sha256": "f5a5eb1573c1f2488fd48a86a4d4c30a461069515fe0b1110fedb46a494eefc7",
+      "code": "navigation_out_of_scope",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I04",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 26516,
+      "penalized_ms": 26516,
+      "evidence_sha256": "11d863bdabf0b83cb5acf2c7f91f5bf8af90f59f926b659ded785604786a3ccd",
+      "included": true
+    },
+    {
+      "task": "I04",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 1672,
+      "penalized_ms": 120000,
+      "evidence_sha256": "7ae8f433baace0a054b5b6a4133898458ec41238a56610f4ed8863ddb7ba5fd7",
+      "code": "ask_user",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I04",
+      "configuration": "luna",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 8922,
+      "penalized_ms": 120000,
+      "evidence_sha256": "b2a681583b47143efe0de882288ba4f6c009568655b707af9305e1eeb2c42e67",
+      "code": "ask_user",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I05",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 29703,
+      "penalized_ms": 29703,
+      "evidence_sha256": "3f7efd5e9880b0c92b91210375a3c1e0fe14e4d4d348e0b76ea81e135ef0d34b",
+      "included": true
+    },
+    {
+      "task": "I05",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 4032,
+      "penalized_ms": 120000,
+      "evidence_sha256": "358426e04e4f39729ca7921a65e17511e16d083c6cac35c605284fc2d7e5357c",
+      "code": "target_not_ready",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I05",
+      "configuration": "luna",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 50796,
+      "penalized_ms": 120000,
+      "evidence_sha256": "1ea479e187ff0d5e52e3d23df797750d58f9b11fa21f63612b661540e1af0800",
+      "code": "ask_user",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I06",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 25547,
+      "penalized_ms": 25547,
+      "evidence_sha256": "d653fa580e5aacb7b9c058be722bb03695e9af3762de6f22ead29bee2a52fc1d",
+      "included": true
+    },
+    {
+      "task": "I06",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 2547,
+      "penalized_ms": 120000,
+      "evidence_sha256": "3a2051f2f04bffa6986aa904c232cd3c49d2721b55ad2cd6ba50ec420c0c6917",
+      "code": "target_not_ready",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I06",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 22188,
+      "penalized_ms": 120000,
+      "evidence_sha256": "455ad34ff95af3e9ea9cb6fe311144a520ac80dfa58751e637edd555d6c64337",
+      "code": "no_progress",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I07",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 30281,
+      "penalized_ms": 30281,
+      "evidence_sha256": "30ddbe5e39be9cc943417ead05152ebabd3b5c7c3f694d440ff6903d0cd2ee7f",
+      "included": true
+    },
+    {
+      "task": "I07",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 3265,
+      "penalized_ms": 120000,
+      "evidence_sha256": "13c57d4b295ae2d3f4daffa4abd14e9de346817cb566f7832b50521673a7ebb0",
+      "code": "navigation_out_of_scope",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I07",
+      "configuration": "luna",
+      "goal_observed": true,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 9641,
+      "penalized_ms": 120000,
+      "evidence_sha256": "ebe3ba0c64a31510db8add4748de4d9db43ac7417693d282d090db3570c91972",
+      "code": "ask_user",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I08",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 29828,
+      "penalized_ms": 29828,
+      "evidence_sha256": "175f0ec719e0e4486dcecda208296c1fd112b2d7bf2e039b79374e39cb37449e",
+      "included": true
+    },
+    {
+      "task": "I08",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 13812,
+      "penalized_ms": 120000,
+      "evidence_sha256": "eb4a0af7dfb46671a793d2889d14b8ab497078b56e835f6f5bb80a0bf74a27d9",
+      "code": "ask_user",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I08",
+      "configuration": "luna",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 88016,
+      "penalized_ms": 120000,
+      "evidence_sha256": "efd1e0bd08a6078c30e452a4c6803013c9b6950f2876a1ab2ca499ad5971b28e",
+      "code": "step_limit",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I09",
+      "configuration": "official",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "environment_blocked",
+      "response_ms": 19453,
+      "penalized_ms": null,
+      "evidence_sha256": "a51b0aab93e926fdd834d13d6d808e87aa6dab63baa1238907246727c7c89149",
+      "included": false,
+      "exclusion": "remote_editor_read_only_quota"
+    },
+    {
+      "task": "I09",
+      "configuration": "jev",
+      "goal_observed": null,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 3235,
+      "penalized_ms": null,
+      "evidence_sha256": "9c85e4b77aeb6fa10b262a4f678b4742617c3e41b931ef833c0cb499a5d99bbd",
+      "code": "ask_user",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": false,
+      "exclusion": "remote_editor_read_only_quota"
+    },
+    {
+      "task": "I09",
+      "configuration": "luna",
+      "goal_observed": null,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 15515,
+      "penalized_ms": null,
+      "evidence_sha256": "df5b51bdd62f0dcb64ba26704dba04564b2e86666ff0a1a518a4216cf871afec",
+      "code": "ask_user",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": false,
+      "exclusion": "remote_editor_read_only_quota"
+    },
+    {
+      "task": "I10",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 12187,
+      "penalized_ms": 12187,
+      "evidence_sha256": "3ab10e6c2749936af9ccaf7b7fb6dacdac1157d63172d397b1ac200839922fc9",
+      "included": true
+    },
+    {
+      "task": "I10",
+      "configuration": "jev",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "needs_input",
+      "response_ms": 1297,
+      "penalized_ms": 120000,
+      "evidence_sha256": "c6b53e19b39de2487d65d1fda1f216325ca1de858d8a95b338cc15da37983e91",
+      "code": "ask_user",
+      "actual_model": "jev-1.13.0",
+      "cleanup_failed": false,
+      "included": true
+    },
+    {
+      "task": "I10",
+      "configuration": "luna",
+      "goal_observed": false,
+      "strict_pass": false,
+      "status": "failed",
+      "response_ms": 9094,
+      "penalized_ms": 120000,
+      "evidence_sha256": "01f5c59a3ff70ee13f1e65cc20f59233527204f3fb554dd688a2c10311ad6306",
+      "code": "navigation_out_of_scope",
+      "actual_model": "gpt-6-luna",
+      "cleanup_failed": false,
+      "included": true
+    }
+  ],
+  "complete": true,
+  "summary": [
+    {
+      "configuration": "official",
+      "valid_tasks": 9,
+      "strict_passes": 9,
+      "goals_observed": 9,
+      "mean_penalized_ms": 24321,
+      "successful_mean_ms": 24321
+    },
+    {
+      "configuration": "jev",
+      "valid_tasks": 9,
+      "strict_passes": 0,
+      "goals_observed": 0,
+      "mean_penalized_ms": 120000,
+      "successful_mean_ms": null
+    },
+    {
+      "configuration": "luna",
+      "valid_tasks": 9,
+      "strict_passes": 1,
+      "goals_observed": 4,
+      "mean_penalized_ms": 107222,
+      "successful_mean_ms": 5000
+    }
+  ],
+  "exclusions": [
+    {
+      "task": "I09",
+      "all_configurations": true,
+      "reason": "Remote TinyMCE reports read-only mode because its monthly editor-load quota is exhausted."
+    },
+    {
+      "task": "I01",
+      "configuration": "official",
+      "attempt": "original",
+      "reason": "Operator implementation work during timed attempt. Preserved, replaced once."
+    },
+    {
+      "task": "I08",
+      "configuration": "official",
+      "attempt": "original",
+      "reason": "Context recovery interruption during timed attempt. Preserved, replaced once."
+    }
+  ]
+}

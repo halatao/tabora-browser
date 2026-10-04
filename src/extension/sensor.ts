@@ -8,7 +8,7 @@ import {siteArguments,validateSiteSchema} from '../site-schema.js';
 import {editorText} from './editor.js';
 import {ownedCombobox} from './widgets.js';
 
-type SensorInput={op:'observe'|'read'|'action'|'point'|'cancel'|'native_prepare'|'native_validate'|'native_finish'|'frame_arm'|'frame_send'|'frame_geometry'|'verify'|'capture_mask'|'capture_clear'|'capture_validate'|'download_target'|'site_discover'|'site_call';origin:string;sessionId:string;documentToken?:string;allowedOrigins?:string[];snapshotId?:string;cursor?:number;limit?:number;baseSnapshotId?:string;read?:ReadInput;action?:unknown;targetId?:string;leaseId?:string;nonce?:string;expect?:unknown;redactTargets?:string[];toolRef?:string;arguments?:unknown;release?:boolean;fresh?:boolean;visual?:{point:{x:number;y:number};rect:string}};
+type SensorInput={credential?:{username:string;password:string};op:'credential'|'observe'|'read'|'action'|'point'|'cancel'|'native_prepare'|'native_validate'|'native_finish'|'frame_arm'|'frame_send'|'frame_geometry'|'verify'|'capture_mask'|'capture_clear'|'capture_validate'|'download_target'|'site_discover'|'site_call';origin:string;sessionId:string;documentToken?:string;allowedOrigins?:string[];snapshotId?:string;cursor?:number;limit?:number;baseSnapshotId?:string;read?:ReadInput;action?:unknown;targetId?:string;leaseId?:string;nonce?:string;expect?:unknown;redactTargets?:string[];toolRef?:string;arguments?:unknown;release?:boolean;fresh?:boolean;visual?:{point:{x:number;y:number};rect:string}};
 type World=typeof globalThis&{__taboraSiteAbort?:AbortController;__taboraFrameListener?:(event:MessageEvent)=>void;__taboraSensor?:{sessionId:string;registry:Registry;native?:{id:string;action:ReturnType<typeof actionSchema.parse>;expires:number;point:{x:number;y:number};identity:string;focus?:Element}};__taboraOperation?:(input:SensorInput)=>Promise<unknown>};
 const world=globalThis as World;
 // Re-injection begins a new sensor generation, including after extension/host reload.
@@ -19,6 +19,20 @@ let masks:HTMLElement[]=[];
 let maskExpiry:ReturnType<typeof setTimeout>|undefined;
 let captureGuard:{target:Element;geometry:string;sensitive:string;extra:Element[];sessionId:string}|undefined;
 const siteTools=new Map<string,{metadata:string;tool:any;sessionId:string}>();
+async function credentialFill(input:SensorInput,registry:Registry){
+  if(!input.credential||!input.snapshotId||!input.targetId)throw new Error('invalid_input');
+  if(location.protocol!=='https:'||location.origin!==input.origin||registry.token!==input.documentToken)throw new Error('credential_scope_mismatch');
+  const baseline=registry.snapshots.get(input.snapshotId);if(!baseline?.targets.some(t=>t.id===input.targetId&&t.kind==='form'))throw new Error('stale_snapshot');
+  const form=registry.resolve(input.targetId,true).el;if(!(form instanceof HTMLFormElement))throw new Error('wrong_target_kind');
+  const fields=Array.from(form.elements).filter(e=>e instanceof HTMLInputElement&&visible(e)) as HTMLInputElement[];
+  const passwords=fields.filter(e=>e.type==='password'&&e.autocomplete!=='new-password'),users=fields.filter(e=>['text','email'].includes(e.type));
+  if(passwords.length!==1||users.length!==1)throw new Error('ambiguous_login_form');
+  const writes=[{el:users[0],value:input.credential.username},{el:passwords[0],value:input.credential.password}];
+  for(const {el} of writes){ready(el,true);if(el.readOnly||ancestor(el,'[data-private],[data-sensitive]')||el.autocomplete==='one-time-code')throw new Error('field_readonly');}
+  registry.snapshots.delete(baseline.snapshotId);let filled=0;
+  try{for(const {el,value} of writes){ready(el,true);if(location.origin!==input.origin||!form.contains(el))throw new Error('stale_binding');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));if(!el.isConnected||el.value!==value)throw new Error('verification_failed');filled++;}return {ok:true,filled,verified:true,submitted:false};}
+  catch{return {ok:false,filled,code:'partial_write',submitted:false};}
+}
 async function bounded<T>(promise:Promise<T>,ms:number,code:string){let timer:ReturnType<typeof setTimeout>|undefined;try{return await Promise.race([promise,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(code)),ms);})]);}finally{clearTimeout(timer);}}
 function activeElement(){let active=document.activeElement;for(let depth=0;active instanceof HTMLElement&&depth<32;depth++){const inner=(active.shadowRoot??chrome.dom.openOrClosedShadowRoot(active))?.activeElement;if(!inner)break;active=inner;}return active;}
 function clearMasks(){clearTimeout(maskExpiry);maskExpiry=undefined;masks.forEach(mask=>mask.remove());masks=[];captureGuard=undefined;}
@@ -54,6 +68,10 @@ function describe(el:Element):Omit<TargetV2,'id'>{
   if(el.matches('table,[role="grid"],[role="table"]')){target.rowCount=el.querySelectorAll('tr,[role="row"]').length;const total=Number(el.getAttribute('aria-rowcount'));target.totalRows=total>0?total:target.rowCount;target.virtualized=total>target.rowCount;}
   target.recordKey=el.getAttribute('data-id')??el.getAttribute('data-key')??el.getAttribute('aria-rowindex')??undefined;
   const style=getComputedStyle(el);if(/auto|scroll/.test(style.overflowY)&&el.scrollHeight>el.clientHeight||el===document.scrollingElement){target.scrollable=true;target.scroll={x:el.scrollLeft,y:el.scrollTop,viewportWidth:el.clientWidth,viewportHeight:el.clientHeight,maxX:Math.max(0,el.scrollWidth-el.clientWidth),maxY:Math.max(0,el.scrollHeight-el.clientHeight)};}
+  if(['link','button'].includes(r)){
+    const menu=ancestor(el,'nav li,[role="menuitem"],.admin__menu li');
+    if(menu){const labels=Array.from(menu.querySelectorAll('a')).filter(node=>node!==el).map(node=>content(node,120,true).replace(/\s+/g,' ').trim()).filter(Boolean);target.contains=[...new Set(labels)].slice(0,24);target.containsTruncated=labels.length>24;}
+  }
   return target;
 }
 world.__taboraOperation=async(input:SensorInput)=>{
@@ -133,7 +151,11 @@ world.__taboraOperation=async(input:SensorInput)=>{
       return {ok:true};
     }
     if(input.op==='observe'){
-      const started=performance.now(),scan=registry.scan(input.fresh),candidates=scan.elements.filter(el=>(el.matches(selector)||ownedCombobox(el)||el.scrollHeight>el.clientHeight&&/auto|scroll/.test(getComputedStyle(el).overflowY))&&(!['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)));
+      const started=performance.now(),scan=registry.scan(input.fresh);
+      const roots=new Map<ShadowRoot,number>();
+      for(const el of scan.elements){const root=el.shadowRoot??(el instanceof HTMLElement?chrome.dom.openOrClosedShadowRoot(el):null);if(root)roots.set(root,roots.size+1);}
+      const rootPath=(el:Element)=>{const path:number[]=[];let root=el.getRootNode();for(let depth=0;root instanceof ShadowRoot&&depth<32;depth++){const ordinal=roots.get(root);if(ordinal===undefined)break;path.unshift(ordinal);root=root.host.getRootNode();}return path;};
+      const candidates=scan.elements.filter(el=>(el.matches(selector)||el.matches('p')&&rootPath(el).length||ownedCombobox(el)||el.scrollHeight>el.clientHeight&&/auto|scroll/.test(getComputedStyle(el).overflowY))&&(!['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)));
       const cursor=input.cursor??0,limit=Math.min(100,input.limit??60),targets:TargetV2[]=[];let seen=0,budget=24000;
       let semanticHits=0,metadataTruncated=false;
       for(const el of candidates){
@@ -141,7 +163,12 @@ world.__taboraOperation=async(input:SensorInput)=>{
         let description;try{description=registry.describe(el,describe);}catch(error){if(error instanceof Error&&error.message==='reader_size_limit'){metadataTruncated=true;continue;}throw error;}const target=description.value;if(description.cached)semanticHits++;if(!target.visible&&target.kind!=='file')continue;
         if(seen++<cursor)continue;
         const size=JSON.stringify(target).length+120;
-        if(targets.length===limit||size>budget)break;budget-=size;targets.push(registry.register(el,target));
+        if(targets.length===limit||size>budget)break;budget-=size;
+        const described=registry.register(el,target);
+        const shadowRootPath=rootPath(el);if(shadowRootPath.length){described.shadowRootPath=shadowRootPath;if(el.matches('p')){described.kind='paragraph';described.role='paragraph';}}
+        const form=el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement||el instanceof HTMLButtonElement?el.form:null;
+        if(form)described.formId=registry.reference(form);
+        targets.push(described);
       }
       registry.prune();const next=seen>cursor+targets.length?cursor+targets.length:null;
       let data='';try{data=content(document.body,32000);}catch(error){if(error instanceof Error&&error.message==='reader_size_limit')metadataTruncated=true;else throw error;}let hash=2166136261;for(let index=0;index<data.length;index++)hash=Math.imul(hash^data.charCodeAt(index),16777619);
@@ -151,6 +178,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
       snapshot.coverage.truncated ||= metadataTruncated;return {ok:true,snapshot:previous?observationDiff(previous,snapshot):snapshot,fullSnapshot:!previous,continuationOf,timings:{sensorMs:Math.round(performance.now()-started),treeCacheHit:scan.cached,semanticHits}};
     }
     if(input.op==='read')return {ok:true,...reader(registry,input.read!)};
+    if(input.op==='credential')return credentialFill(input,registry);
     const baseline=input.snapshotId?registry.snapshots.get(input.snapshotId):undefined;
     if(!baseline)throw new Error('stale_snapshot');
     const targetId=input.op==='point'?input.targetId!:actionSchema.parse(input.action).targetId;

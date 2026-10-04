@@ -8,7 +8,7 @@ import {captureRegion} from './capture.js';
 import {downloadLink} from './download.js';
 import {imageSize} from '../image-size.js';
 
-export function createCapabilitySession(id:string,getBinding:()=>Binding|undefined,getPolicy:()=>Pick<BrowserProfile,'mode'|'vaultEnabled'>,validateTab:(tabId:number)=>Promise<void>,getGeneration:()=>number,allowedOrigins:()=>string[],rebind:(tabId:number)=>Promise<Binding>,siteToolsEnabled:()=>boolean){
+export function createCapabilitySession(id:string,getBinding:()=>Binding|undefined,getPolicy:()=>Pick<BrowserProfile,'mode'|'vaultEnabled'>,validateTab:(tabId:number)=>Promise<void>,getGeneration:()=>number,allowedOrigins:()=>string[],rebind:(tabId:number)=>Promise<Binding>,siteToolsEnabled:()=>boolean,credentialUse?:(credentialId:string,binding:Binding)=>Promise<{username:string;password:string}>){
   const loaded=new Set<string>(),snapshots=new Map<string,{frameId:number;documentId:string;origin:string;snapshotId:string;documentToken:string;targets:TargetV2[]}>();
   const loadedTokens=new Map<string,string>();
   let pending:{id:string;stateVersion:string;frameId:number;action:BrowserAction;expires:number;expect?:OutcomePredicate;timeoutMs:number;dialog?:ExpectedDialog;visual?:{point:{x:number;y:number};rect:string}}|undefined;
@@ -25,6 +25,7 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
   async function frames(){
     const b=binding(),run=getGeneration();await validateTab(b.tabId);
     const all=await chrome.webNavigation.getAllFrames({tabId:b.tabId});if(run!==getGeneration())throw new PilotError('cancelled');
+    if((all?.length??0)>64)throw new PilotError('observation_scope_limit');
     return Promise.all((all??[]).slice(0,64).map(async frame=>{
       let origin:string|undefined;try{origin=exactOrigin(frame.url);}catch{}
       const inTask=origin===b.origin||!!origin&&allowedOrigins().includes(origin),permitted=!!origin&&inTask&&await chrome.permissions.contains({origins:[origin+'/*']});
@@ -79,6 +80,16 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
     if(current?.frameId!==0)throw new PilotError('frame_limit');return result;
   }
   async function command(name:string,input:any){
+    if(name==='credential'){
+      const request=z.object({frameId:z.literal(0),stateVersion:z.string().min(1),targetId:z.string().min(1),credentialId:z.string().uuid()}).strict().parse(input);
+      enforceRecipe(getPolicy(),'login');if(handoff)throw new PilotError('needs_user');
+      const b=binding(),current=snapshots.get('0'),run=getGeneration();
+      if(!current||request.stateVersion!==b.documentId+':'+current.snapshotId||current.targets.find(t=>t.id===request.targetId)?.kind!=='form')throw new PilotError('stale_snapshot');
+      if(!credentialUse)throw new PilotError('credential_scope_mismatch');
+      const credential=await credentialUse(request.credentialId,b);
+      enforceRecipe(getPolicy(),'login');await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');
+      return sensor(0,{op:'credential',targetId:request.targetId,snapshotId:current.snapshotId,documentToken:current.documentToken,credential});
+    }
     if(name==='site_tools'||name==='site_call'){
       if(!siteToolsEnabled())return {status:'unsupported',reason:'webmcp_not_enabled',tools:[]};
       enforceRecipe(getPolicy(),name==='site_tools'?'extract':'fill');if(handoff&&name==='site_call')throw new PilotError('needs_user');
@@ -114,7 +125,7 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
       });
     }
     if(name==='capabilities'){const extended=await chrome.permissions.contains({permissions:['debugger']});return {schemaVersion:2,capabilities:{semantic:{status:'available'},shadow:{status:'available'},frames:{status:'available'},reader:{status:'available'},controls:{status:'available'},delta:{status:'available'},nativeInput:{status:extended?'available':'permission_required'},capture:{status:extended?'available':'permission_required'},vision:{status:'unsupported',reason:'decision_adapters_text_only'},webmcp:{status:siteToolsEnabled()?'experimental':'unsupported',reason:siteToolsEnabled()?'native_runtime_discovery_required':'webmcp_not_enabled'}}};}
-    if(name==='frames')return {schemaVersion:2,frames:await frames()};
+    if(name==='frames')return {schemaVersion:2,frames:await frames(),allowedOrigins:[binding().origin,...allowedOrigins()]};
     if(name==='state'){enforceRecipe(getPolicy(),'extract');return state(input);}
     if(name==='read'){enforceRecipe(getPolicy(),'extract');return sensor(input.frameId,{op:'read',read:input});}
     if(name==='plan'){

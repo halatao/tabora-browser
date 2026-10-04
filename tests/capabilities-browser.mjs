@@ -3,6 +3,7 @@ import {mkdir,mkdtemp,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
@@ -14,6 +15,13 @@ const origin=await new Promise((resolve,reject)=>{let output='';const timer=setT
 await cp('dist/extension',extension,{recursive:true});const manifest=JSON.parse(await readFile(path.join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['http://127.0.0.1/*'];await writeFile(path.join(extension,'manifest.json'),JSON.stringify(manifest));
 const extensionId=(await readFile('extension-id.txt','utf8')).trim(),checks=[],sensorPairs=[];let context,client;
 const watchdog=setTimeout(()=>{console.error('Capability integration timed out');process.exit(1);},180000);
+const readinessServer=createServer((request,response)=>{
+  if(request.url==='/probe'){response.writeHead(200,{'content-type':'text/html'});response.end('<!doctype html><head><script defer src="/script"></script></head><body><button id="ready">Ready</button><div id="shadow-one"></div><div id="shadow-two"></div><img src="/image">');}
+  else if(request.url==='/script')setTimeout(()=>{response.writeHead(200,{'content-type':'text/javascript'});response.end('document.querySelector("#ready").dataset.initialized="yes";document.querySelector("#shadow-one").attachShadow({mode:"closed"}).innerHTML="<p>First private-root paragraph</p>";document.querySelector("#shadow-two").attachShadow({mode:"open"}).innerHTML="<p>Second root paragraph</p>";');},600);
+  else if(request.url==='/image'){response.writeHead(200,{'content-type':'image/png'});response.flushHeaders();}
+  else {response.writeHead(404);response.end();}
+});
+await new Promise(resolve=>readinessServer.listen(0,'127.0.0.1',resolve));const readinessOrigin='http://127.0.0.1:'+readinessServer.address().port;
 async function tool(name,args={},expected){const reply=await client.callTool({name,arguments:args}),data=JSON.parse(reply.content.find(c=>c.type==='text').text);if(expected){assert(reply.isError,JSON.stringify(data));assert.equal(data.code,expected);}else assert(!reply.isError,JSON.stringify(data));return data;}
 async function observe(task){return tool('browser_state',{sessionId:task.sessionId});}
 async function act(task,observation,action){const plan=await tool('browser_plan',{sessionId:task.sessionId,stateVersion:observation.stateVersion,action});return tool('browser_commit',{sessionId:task.sessionId,actionId:plan.actionId,stateVersion:plan.stateVersion});}
@@ -26,6 +34,14 @@ try{
   const panel=await context.newPage();await panel.goto(`chrome-extension://${extensionId}/panel.html`);await panel.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Lokální host připojený');
   const profileId=(await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}))).data.profile.id;await panel.close();
   client=new Client({name:'capability-integration',version:'1'});await client.connect(new StdioClientTransport({command:process.execPath,args:[path.resolve('dist/host/mcp.js')],env:{...process.env,TABORA_STATE_DIR:state},stderr:'pipe'}));
+  const readySession=await tool('browser_session_create',{profileId,name:'DOM readiness and shadow provenance',allowedOrigins:[readinessOrigin]}),readyStarted=performance.now();
+  const readyOpen=await tool('browser_session_open',{sessionId:readySession.id,url:readinessOrigin+'/probe',waitForReady:true,readinessTimeoutMs:4000});assert(readyOpen.attached,JSON.stringify(readyOpen));
+  const readyPage=context.pages().find(page=>page.url()===readinessOrigin+'/probe');
+  assert.equal(await readyPage.evaluate(()=>document.querySelector('#ready').dataset.initialized),'yes','Binding must wait for deferred initialization');
+  assert(performance.now()-readyStarted<4000,'An unfinished image must not hold DOM readiness hostage');assert.equal(await readyPage.evaluate(()=>document.readyState),'interactive');
+  const rooted=await tool('browser_state',{sessionId:readySession.id}),paragraphs=rooted.snapshot.targets.filter(target=>target.kind==='paragraph');assert.equal(paragraphs.length,2);assert.deepEqual(paragraphs.map(target=>target.shadowRootPath),[[1],[2]]);
+  for(const [index,paragraph] of paragraphs.entries()){const read=await tool('browser_read',{sessionId:readySession.id,targetId:paragraph.id,format:'text'});assert.equal(read.text.trim(),index?'Second root paragraph':'First private-root paragraph');}
+  await tool('browser_session_release',{sessionId:readySession.id,closeCreatedTabs:true});checks.push('parsed document waits for deferred initialization, not unfinished images; exact paragraphs retain open/closed shadow-root provenance');
   async function task(family,variant=1,options={}){const caseId=`BCB-${family}-V${String(variant).padStart(2,'0')}`,s=await tool('browser_session_create',{profileId,name:caseId,...options}),url=`${origin}/task/${caseId}`,opened=await tool('browser_session_open',{sessionId:s.id,url,active:true,waitForReady:true});assert(opened.attached,JSON.stringify(opened));return {caseId,sessionId:s.id,tabId:opened.tabId,page:context.pages().filter(p=>p.url()===url).at(-1)};}
   const c1=await task('C01'),one=await observe(c1);assert(target(one,'Save customer','button'));
   const cdp=await context.newCDPSession(c1.page),ax=await cdp.send('Accessibility.getFullAXTree');assert(ax.nodes.some(n=>n.role?.value==='button'&&n.name?.value==='Save customer'));await cdp.detach();
@@ -95,6 +111,6 @@ try{
   await stale.page.evaluate(()=>{const old=document.querySelector('[role="button"]');old.replaceWith(old.cloneNode(true));});await tool('browser_commit',{sessionId:stale.sessionId,actionId:plan.actionId,stateVersion:before.stateVersion},'stale_reference');checks.push('replacement cannot redirect old planned action');
   const output={passed:true,checks,sensorPairs,kind:'executor_integration',scope:'V2 controls/readers/lifecycle/artifacts integration; development fixtures, not full BCB',seed:11};await mkdir('reports/capabilities',{recursive:true});await writeFile('reports/capabilities/latest.json',JSON.stringify(output,null,2));console.log(JSON.stringify(output));
 }finally{
-  clearTimeout(watchdog);await client?.close().catch(()=>{});await context?.close().catch(()=>{});const exited=child.exitCode===null?once(child,'exit'):Promise.resolve();child.kill();await exited;
+  clearTimeout(watchdog);await client?.close().catch(()=>{});await context?.close().catch(()=>{});readinessServer.closeAllConnections();await new Promise(resolve=>readinessServer.close(resolve));const exited=child.exitCode===null?once(child,'exit'):Promise.resolve();child.kill();await exited;
   assert.equal(path.dirname(directory),base);await rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:200});
 }

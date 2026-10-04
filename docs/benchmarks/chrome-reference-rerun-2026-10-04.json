@@ -1,0 +1,122 @@
+{
+  "classification": "partial_live_chrome_reference_rerun",
+  "date": "2026-10-04",
+  "official": {
+    "strict_success": 9,
+    "tasks": 9,
+    "mean_seconds": 15.065,
+    "participant": "Installed official extension + calling Codex agent",
+    "backend_model_attested": false,
+    "browser_id": "3"
+  },
+  "tabora": {
+    "status": "pending_production_update",
+    "loaded_fingerprint": "467eb867edbf39f1aa055a74bff017a4ddcc528a7810b8877197ddd37f39be7b",
+    "target_fingerprint": "3c6ff624a6094c6fd342a24ca51519daa215d10ec9614576e916ad044c7bbee8",
+    "blocking_reason": "Another attached task in Ondrej profile; update would interrupt it"
+  },
+  "protocol_hash": "2cd00b61397f2107392d4c93a9f3f18a3e6d670c3110312b8f4f2145be564368",
+  "scorer_sha256": "c23add7a86505577c01a08328c88b86975ce76fd0a8a75279564c9e419f325f5",
+  "episodes": [
+    {
+      "task": "I01",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 6995,
+      "penalized_ms": 6995,
+      "evidence_sha256": "aec6fdcdc521fa679a01100fe2d103ef0ed5acdc598a0c0cd5cb849931b96736"
+    },
+    {
+      "task": "I02",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 7618,
+      "penalized_ms": 7618,
+      "evidence_sha256": "ec568f368c0103bda617ef788403f64799a0232971e91b5b159ceb7442c556bc"
+    },
+    {
+      "task": "I03",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 10444,
+      "penalized_ms": 10444,
+      "evidence_sha256": "2288ed8092e4b37e8998ca98397020db8b69ea56bd7bdb601a21e7c924a888ea"
+    },
+    {
+      "task": "I04",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 10630,
+      "penalized_ms": 10630,
+      "evidence_sha256": "a365f8c638fb781a2e4aa779aab4af1fccd69e44469cb7a24560096afe91da8f"
+    },
+    {
+      "task": "I05",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 17036,
+      "penalized_ms": 17036,
+      "evidence_sha256": "680068ec97aa17667ffa12b6932984d7b87a29269e37ea254ab5b3ec66560f70"
+    },
+    {
+      "task": "I06",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 26474,
+      "penalized_ms": 26474,
+      "evidence_sha256": "b0bfb47c70f7fe24be24748838a65d5428c4dd642a172498369da04bfb9d50f8"
+    },
+    {
+      "task": "I07",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 21816,
+      "penalized_ms": 21816,
+      "evidence_sha256": "20e6ae977840329a2ebc470b20a9b7c7ef0c2adde7fc6c840b7303f3be91bc6e"
+    },
+    {
+      "task": "I08",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 21602,
+      "penalized_ms": 21602,
+      "evidence_sha256": "89872357d5c162f6241a211406a9a0ecaa311e3a182737d1b1932db66227b6e0"
+    },
+    {
+      "task": "I10",
+      "configuration": "official",
+      "goal_observed": true,
+      "strict_pass": true,
+      "status": "completed",
+      "response_ms": 12971,
+      "penalized_ms": 12971,
+      "evidence_sha256": "67a5da21958cc29391f5ae51d7c388ca6ae6d9783b1df3f7ebf28c8295b610be"
+    }
+  ],
+  "excluded": [
+    "I09 upstream quota exclusion retained; not rechecked in this partial run"
+  ],
+  "limitations": [
+    "Partial run, not a paired comparison.",
+    "One repetition; prior development exposure.",
+    "The calling agent performs decisions and observes UI; official backend model is not attested.",
+    "Clock includes calling-agent/tool orchestration and a progress update during I06.",
+    "AX state retained in tool transcript, not separately captured per-episode files."
+  ]
+}

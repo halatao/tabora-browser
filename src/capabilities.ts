@@ -34,6 +34,9 @@ export type TargetV2={
   value?:string;inputType?:string;inputPurpose?:'username'|'current-password'|'new-password'|'one-time-code';secret?:boolean;accept?:string;multiple?:boolean;href?:string;clickable?:boolean;draggable?:boolean;submitter?:boolean;formValid?:boolean;
   options?:{index:number;label:string;selected:boolean;disabled:boolean}[];optionCount?:number;
   rowCount?:number;columnCount?:number;totalRows?:number;virtualized?:boolean;scrollable?:boolean;scroll?:{x:number;y:number;maxX:number;maxY:number;viewportWidth?:number;viewportHeight?:number};
+  formId?:string;
+  shadowRootPath?:number[];
+  contains?:string[];containsTruncated?:boolean;
 };
 export type ObservationV2={
   schemaVersion:2;snapshotId:string;epoch:number;dataVersion?:string;origin:string;path:string;title:string;targets:TargetV2[];

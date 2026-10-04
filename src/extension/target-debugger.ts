@@ -1,7 +1,8 @@
 import {PilotError} from '../shared.js';
 
-type Lease={target:chrome.debugger.Debuggee;alive:boolean};
+type Lease={target:chrome.debugger.Debuggee;alive:boolean;dialogBlocked?:boolean};
 const leases=new Map<number,Lease>();
+export function markDialogBlocked(tabId:number){const lease=leases.get(tabId);if(lease)lease.dialogBlocked=true;}
 
 /** A private, tab-scoped CDP lease. Nested input/capture reuse it; other debuggers are never detached. */
 export async function withTargetDebugger<T>(tabId:number,validate:()=>Promise<void>,action:(target:chrome.debugger.Debuggee|undefined)=>Promise<T>,required=true):Promise<T>{
@@ -38,8 +39,8 @@ export async function withTargetDebugger<T>(tabId:number,validate:()=>Promise<vo
   }finally{
     let cleanupFailed=false;
     if(attached&&lease.alive){
-      if(rendering)await chrome.debugger.sendCommand(lease.target,'Page.stopScreencast').catch(()=>{});
-      await chrome.debugger.sendCommand(lease.target,'Emulation.setFocusEmulationEnabled',{enabled:false}).catch(()=>{});
+      if(rendering&&!lease.dialogBlocked)await chrome.debugger.sendCommand(lease.target,'Page.stopScreencast').catch(()=>{});
+      if(!lease.dialogBlocked)await chrome.debugger.sendCommand(lease.target,'Emulation.setFocusEmulationEnabled',{enabled:false}).catch(()=>{});
       if(lease.alive)try{await chrome.debugger.detach(lease.target);}catch{cleanupFailed=lease.alive;}
     }
     leases.delete(tabId);chrome.debugger.onDetach.removeListener(detached);chrome.debugger.onEvent.removeListener(frame);

@@ -1,6 +1,6 @@
 import type {BrowserAction,ExpectedDialog} from '../capabilities.js';
 import {PilotError,exactOrigin} from '../shared.js';
-import {withTargetDebugger} from './target-debugger.js';
+import {withTargetDebugger,markDialogBlocked} from './target-debugger.js';
 
 const keys:Record<string,[string,string,number]>={Enter:['Enter','Enter',13],Tab:['Tab','Tab',9],Escape:['Escape','Escape',27],ArrowUp:['ArrowUp','ArrowUp',38],ArrowDown:['ArrowDown','ArrowDown',40],ArrowLeft:['ArrowLeft','ArrowLeft',37],ArrowRight:['ArrowRight','ArrowRight',39],Home:['Home','Home',36],End:['End','End',35],PageUp:['PageUp','PageUp',33],PageDown:['PageDown','PageDown',34],Backspace:['Backspace','Backspace',8],Delete:['Delete','Delete',46],Space:[' ','Space',32]};
 type Point={x:number;y:number};
@@ -15,7 +15,7 @@ export async function nativeInput(tabId:number,action:BrowserAction,point:Point,
     }
     if(method!=='Page.javascriptDialogOpening')return;
     let matches=false;try{matches=!!dialog&&params.type===dialog.type&&params.message===dialog.message&&exactOrigin(params.url)===origin;}catch{}
-    if(!matches){blocked=true;return;}
+    if(!matches){blocked=true;markDialogBlocked(tabId);return;}
     handling=chrome.debugger.sendCommand(target,'Page.handleJavaScriptDialog',{accept:dialog!.accept}).then(()=>{},()=>{blocked=true;});
   };
   try{

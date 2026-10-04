@@ -40,7 +40,7 @@ try{
   await panel.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Lokální host připojený',undefined,{timeout:30000});
   profileId=(await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}))).data.profile.id;
   const connect=async()=>{const t=new StdioClientTransport({command:process.execPath,args:[path.resolve('dist/host/mcp.js')],env:{...process.env,TABORA_STATE_DIR:state,TABORA_FILE_ROOTS_B64:Buffer.from(JSON.stringify([workspace])).toString('base64')},stderr:'pipe'});const c=new Client({name:'file-extension-integration',version:'1'});await c.connect(t);clients.push(c);return {c,t};};
-  ({c:client,t:transport}=await connect());assert.equal((await client.listTools()).tools.length,47);
+  ({c:client,t:transport}=await connect());assert.equal((await client.listTools()).tools.length,48);
   // No panel or picker exists during the first four autonomous cases.
   await panel.close();assert(!context.pages().some(p=>p.url().includes('panel.html')));
 

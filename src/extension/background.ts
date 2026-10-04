@@ -4,6 +4,7 @@ import { createBrowserSession, type BrowserSession } from './session.js';
 import { nativeErrorCode } from './native-errors.js';
 import {enforceSafeTab,ownsCleanupTab} from './policy.js';
 import {waitForTab} from './readiness.js';
+import {buildInfo} from '../build-info.js';
 
 let native:chrome.runtime.Port|undefined,connecting:Promise<void>|undefined,profile:BrowserProfile,reconnectAttempts=0;
 const requests=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
@@ -57,6 +58,8 @@ async function ensureConnected(){
       setTimeout(()=>void ensureConnected().catch(()=>{}),Math.min(30000,1000*2**Math.min(reconnectAttempts++,5))+Math.floor(Math.random()*250));
     });
     await send('hello',profile);
+    const hostIdentity=await send('status');
+    if(!hostIdentity.build||hostIdentity.build.contractVersion!==buildInfo.contractVersion){native?.disconnect();throw new PilotError('host_update_required');}
     reconnectAttempts=0;
     if(profile.nameSource!=='legacy'){
       try{const detected=await send('profile.detect',{browser:/Edg\//.test(navigator.userAgent)?'edge':'chrome',key:profile.browserProfileKey});
@@ -110,7 +113,7 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
     if(source!=='mcp')throw new PilotError('forbidden');
     for(const w of sessions.values())w.session.invalidate();return {invalidated:true};
   }
-  if(source==='controller'&&!['status','observe','manual','step','select','cancel','pin','popups.list','vault.list','v2.capabilities','v2.frames','v2.state','v2.read','v2.plan','v2.commit','v2.handoff','v2.site_tools','v2.site_call','v2.download','v2.capture','v2.capture_chunk','v2.capture_release','files.upload'].includes(name))throw new PilotError('forbidden');
+  if(source==='controller'&&!['status','select','cancel','pin','popups.list','vault.list','v2.capabilities','v2.frames','v2.state','v2.read','v2.plan','v2.commit','v2.credential','v2.handoff','v2.site_tools','v2.site_call','v2.download','v2.capture','v2.capture_chunk','v2.capture_release','files.upload'].includes(name))throw new PilotError('forbidden');
   if(source==='mcp'&&!profile.mcpEnabled&&name!=='session.release')throw new PilotError('mcp_access_disabled');
   if(name==='profile.detect'){if(source!=='panel')throw new PilotError('forbidden');return host(name,input);}
   if(name==='provider.status'){
@@ -157,7 +160,7 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
     const result=await host(name,payload,sessionId);if(result.status!=='running')w.runId=undefined;return result;
   }
   if(source==='panel'&&w.runId&&!['status','cancel','session.release'].includes(name))throw new PilotError('run_active');
-  if(name==='status')return {...await w.session.invoke(name),profile,sessions:[...sessions.values()].map(summary)};
+  if(name==='status')return {...await w.session.invoke(name),extensionBuild:buildInfo,profile,sessions:[...sessions.values()].map(summary)};
   if(name==='popups.list')return {popups:[...w.popups.values()]};
   if(name==='session.release'){const p=z.object({closeCreatedTabs:z.boolean().default(false)}).strict().parse(payload);return release(w,p.closeCreatedTabs);}
   if(name==='cancel'){w.runId=undefined;return w.session.invoke(name);}
@@ -166,7 +169,7 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
   try{
     if(w.session.binding&&['observe','decide','manual','execute','step','select','benchmark','files.upload'].includes(name))enforceSafeTab(profile,await chrome.tabs.get(w.session.binding.tabId),w);
     if(name==='tabs.open'){
-      const p=z.object({url:z.string().url().max(2048),active:z.boolean().default(false),waitForReady:z.boolean().optional()}).strict().parse(payload);exactOrigin(p.url);
+      const p=z.object({url:z.string().url().max(2048),active:z.boolean().default(false),waitForReady:z.boolean().optional(),readinessTimeoutMs:z.number().int().min(1000).max(60000).default(45000)}).strict().parse(payload);exactOrigin(p.url);
       let tab:chrome.tabs.Tab;
       if(profile.mode==='safe'&&w.safeWindowId===undefined){
         const existing=await safeWindow(w.windowId);
@@ -185,7 +188,7 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
         await chrome.tabGroups.update(w.groupId,{title:w.session.name,color:'blue'});
       }catch{return {tabId,windowId:tab.windowId,opened:true,grouped:false,attached:false,code:'group_failed'};}
       if(p.waitForReady){
-        try{await waitForTab(tabId);if(w.closed)throw new PilotError('session_closed');const binding=await w.session.invoke('pin',{tabId});return {tabId,groupId:w.groupId,windowId:tab.windowId,opened:true,attached:true,binding};}
+        try{await waitForTab(tabId,p.readinessTimeoutMs,true);if(w.closed)throw new PilotError('session_closed');const binding=await w.session.invoke('pin',{tabId});return {tabId,groupId:w.groupId,windowId:tab.windowId,opened:true,attached:true,binding};}
         catch(error){return {tabId,groupId:w.groupId,windowId:tab.windowId,opened:true,attached:false,code:safeCode(error)};}
       }
       return {tabId,groupId:w.groupId,windowId:tab.windowId,opened:true,attached:false,next:'Wait for the page to load, then attach this tab.'};

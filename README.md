@@ -5,6 +5,14 @@ Local browser control for AI agents, through MCP. A Manifest V3 extension execut
 ## Benchmarks
 
 See [benchmark methodology and measured pilot results](docs/benchmarks/README.md).
+The [latest live Chrome compatibility comparison](docs/benchmarks/chrome-comparison-2026-10-04.md)
+completed 9/9 valid tasks for all three configurations: official extension plus
+calling Codex agent (15.07 s mean), Tabora + Jev 1.13.0 (2.93 s), and Tabora +
+Codex SDK gpt-6-luna (7.23 s). One remote iframe editor remains excluded.
+This is a single developmental run with locally authored goals/scoring; browser
+profile/cache equality is not attested. It does not establish a general speed
+advantage or production stability. The [original failed pilot](docs/benchmarks/internet-2026-10-04.md)
+remains available as historical evidence.
 The primary proposed product comparison uses the externally maintained WebArena-Verified
 workload and its evaluator. Tabora may use its own declared model/routing policy;
 fairness requires equal tasks and budgets, not identical models. Existing BCB
@@ -79,7 +87,7 @@ The setup script uses the clients' supported registration commands. For other st
 
 References: [Codex MCP](https://developers.openai.com/codex/mcp/), [Claude Code MCP](https://code.claude.com/docs/en/mcp).
 
-The server exposes 47 tools, including versioned state/actions, readers, documents, captures, attachments and provider/model selection. See [capability contracts](docs/capabilities.md). Typical flow for a calling agent:
+The server exposes 48 tools, including versioned state/actions, readers, documents, captures, attachments and provider/model selection. See [capability contracts](docs/capabilities.md). Typical flow for a calling agent:
 
 1. `browser_profiles` → choose a profile ID; `browser_tabs` lists its tabs.
 2. `browser_session_create` with a meaningful task name.
@@ -92,7 +100,7 @@ The server exposes 47 tools, including versioned state/actions, readers, documen
 
 Interactive actions run in the owned tab without activating it, focusing its window or restoring a minimized window. With Chrome-granted `debugger` permission, a tab-scoped [CDP focus emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/#method-setFocusEmulationEnabled) makes the target renderer act focused/visible during preparation, dispatch, readiness and fresh observation; it is disabled and detached afterward. Native input and target screenshots reuse this lease. [Playwright uses the same protocol primitive](https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/chromium/crPage.ts). Ordinary DOM actions still work without debugger permission, but visibility/focus-sensitive sites then have no emulation guarantee. A competing debugger or unsupported emulation fails before dispatch; Tabora does not silently switch to foreground execution or detach another debugger. Element focus, ownership, mode, cancellation and exact document binding are still checked. Reads do not acquire this lease. One executor interaction remains serialized per profile through readiness; concurrent model inference is independent.
 
-Focus emulation alone can leave Chromium's hidden compositor throttled. During the same short lease, a fixed `Page.startScreencast` stream constrained to one pixel keeps rendering frames available. Its bytes are discarded locally; they are never stored, logged or passed to a provider. The stream is stopped before focus emulation is disabled and the debugger is detached. Actual user-requested captures remain separate, region-bound and pixel-redacted. See [background execution](docs/background-execution.md) for contracts and evidence.
+Focus emulation alone can leave Chromium's hidden compositor throttled. During the same short lease, a fixed `Page.startScreencast` stream constrained to one pixel keeps rendering frames available. Its bytes are discarded locally; they are never stored, logged or passed to a provider. The stream is stopped before focus emulation is disabled and the debugger is detached. When an unhandled human dialog blocks renderer commands, the lease detaches directly without waiting for those commands or answering the dialog. Actual user-requested captures remain separate, region-bound and pixel-redacted. See [background execution](docs/background-execution.md) for contracts and evidence.
 
 Use `npm run test:background` to verify actual MCP/extension execution against inactive and minimized tabs, including trusted mouse/keyboard/drag events, animation-frame readiness, navigation and pixel-redacted screenshots. Set `TABORA_BACKGROUND_HEADFUL=1` to test a normal browser window too. The test launches plain Chromium without global background-throttling flags and connects with Playwright `noDefaults: true`, so its default focus emulation cannot supply the feature being tested. It reports matched warm executor timings separately from model inference and external agent benchmarks. Browser/OS permission prompts, native dialogs, frozen/discarded pages and anti-automation behavior remain distinct limitations; this is not a guarantee that every site supports invisible execution.
 
@@ -100,11 +108,11 @@ Native select observations expose bounded option labels, original indices and se
 
 `browser_sessions`, `browser_cancel`, and `browser_vault_list` support inspection, cancellation and credential metadata. Each MCP connection owns its sessions; one session owns an attached tab. Different sessions/profiles can work concurrently. Navigation invalidates prepared actions; outside `browser_step`, reattach and observe. If the host restarts, MCP stdio stays alive and reconnects on the next request. The extension reconnects with bounded exponential backoff. Existing sessions are lost; discover the profile and create a new session. In-flight actions fail without automatic replay. A readiness transition is not proof of the intended business outcome. Do not automatically retry ambiguous actions.
 
-For a local retrieval task, select a provider/model and enter a URL and goal. Existing retrieval behavior remains compatible. For general tasks, the connected agent can use versioned `browser_state` → `browser_plan` → `browser_commit`, exact readers, or a typed `workflow` passed to `browser_run_start`. The workflow supports task-supplied form values, text edits, data/document extraction, exact aggregation, scoped autonomous files/uploads, downloads, drag/drop, dialogs and owned popups. Completion requires fresh source-bound answer or business evidence. Poll `browser_run_status`; cancel with `browser_run_cancel`.
+For a local retrieval task, select a provider/model and enter a URL and goal. Raw goals and supplied workflows now share the canonical V2 controller. Raw planning is bounded; see the [capability matrix](docs/capability-matrix.md) and [migration validation record](docs/architecture-delivery-2026-10-04.md). For general tasks, the connected agent can use versioned `browser_state` → `browser_plan` → `browser_commit`, exact readers, or a typed `workflow` passed to `browser_run_start`. The workflow supports task-supplied form values, text edits, data/document extraction, exact aggregation, scoped autonomous files/uploads, downloads, drag/drop, dialogs and owned popups. Completion requires fresh source-bound answer or business evidence. Poll `browser_run_status`; cancel with `browser_run_cancel`.
 
 Providers choose bounded operation IDs; the extension executes. Internal workflows use trusted Chrome input by default and fail with native_input_permission_required if Chrome has not granted the required debugger permission. Reload/re-enable an updated extension through Chrome and complete any installation/update consent; this permission cannot be granted by a runtime panel request. Explicit nativeInput:false opts into the limited DOM backend. No fallback replays an uncertain write. For visual tasks, workflow.visual explicitly authorizes a masked top-frame capture and may select a separate provider (for example Jev for text and Codex SDK for images). Codex/Claude image adapters accept bounded real image blocks; provider/model support is checked before execution. Jev image support remains unverified and is rejected explicitly. The calling MCP agent can also explicitly request redacted images and use its own vision capability. There is no unbounded planner or free-form generation of field values. See [workflow example, capabilities and limits](docs/capabilities.md).
 
-Runs stop on deadline, bounded steps, missing input or no progress. Mode/provider/access changes revoke prepared actions and runs. An uncertain write is never replayed automatically. Handoff/resume obtains fresh refs after user intervention.
+Runs report engine/build identity, phase timings and separate decision/action counts. They stop on deadline, bounded steps, unsupported intent, missing input or no progress. Mode/provider/access changes revoke prepared actions and runs. An uncertain write is never replayed automatically. Handoff/resume obtains fresh refs after user intervention.
 
 ## Automatic local attachments
 

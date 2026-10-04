@@ -210,12 +210,10 @@ test('workflow vault login uses an opaque credential once and never submits or e
   await executeWorkflow(status,'x'.repeat(1500),flow,false,5,async(command,input:any)=>{
     if(command==='vault.list')return [{id:credentialId,kind:'website',origin:snapshot.origin}];
     if(command==='v2.frames')return {frames:[{frameId:0,allowed:true}]};
-    if(command==='v2.state')return {stateVersion:'d:s',binding:{documentId:'d',origin:snapshot.origin},snapshot:{...snapshot,targets:[{...target,inputType:'password',secret:true},{...target,id:'save',kind:'button',name:'Save'},{...target,id:'receipt',kind:'status',name:'Receipt'}]}};
+    if(command==='v2.state')return {stateVersion:'d:s',binding:{documentId:'d',origin:snapshot.origin},snapshot:{...snapshot,targets:[{...target,inputType:'password',secret:true},{...target,id:'f',kind:'form',name:'Account'},{...target,id:'save',kind:'button',name:'Save'},{...target,id:'receipt',kind:'status',name:'Receipt'}]}};
     if(command==='v2.read')return {text:saved?'Saved':'Ready',complete:true};
     if(command==='select'){assert(!JSON.stringify(input).includes(credentialId));assert(input.request.question.length<=2000);assert.equal(input.request.context.taskProgress.originalGoal,'x'.repeat(1500));const choices=input.request.choices;if(fills){assert(!choices.some((choice:any)=>choice.id.startsWith('login_')));assert.equal(input.request.context.taskProgress.scopedCredentialFills,1);assert(input.request.question.includes('Hidden password bytes are not missing task parameters'));}return {status:'selected',choiceId:fills?choices.find((choice:any)=>choice.description.startsWith('Activate button: Save')).id:'login_0',model:'test',latencyMs:0};}
-    if(command==='observe')return {binding:{origin:snapshot.origin,documentId:'d'},snapshot:{origin:snapshot.origin,documentToken:'legacy',targets:[{id:'f',kind:'form',name:'Account'}]}};
-    if(command==='manual'){assert.equal(input.credentialId,credentialId);assert.equal(input.recipe,'login');return {actionId:'p'};}
-    if(command==='step'){fills++;assert.equal(input.stateVersion,'d:legacy');return {action:{ok:true,verified:true,submitted:false}};}
+    if(command==='v2.credential'){assert.equal(input.credentialId,credentialId);assert.equal(input.stateVersion,'d:s');assert.equal(input.targetId,'f');fills++;return {ok:true,verified:true,submitted:false};}
     if(command==='v2.plan')return {actionId:'save',stateVersion:'d:s'};
     if(command==='v2.commit'){saved=true;return {action:{dispatch:'sent',outcome:'unverified'}};}
     throw Error(command);

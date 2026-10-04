@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PROVIDERS, PilotError, safeCode, exactOrigin, providerId, requestSchema, type Snapshot, type Binding, type ActionPlan, type DecisionRequest, type DecisionResult } from '../shared.js';
-import { pageOperation, type PageInput } from './page.js';
+import {legacyRecipes,type RecipeInput as PageInput} from './legacy-recipes.js';
 import { summarize, type BenchmarkRow } from '../benchmark.js';
 import {enforceRecipe} from './policy.js';
 import {waitForTab,withInteractiveTab} from './readiness.js';
@@ -15,7 +15,8 @@ let generation=0,busy=false,running=false,closed=false,stepActive=false;
 let capabilityStepActive=false;
 let expectedNavigation:{tabId:number;origin:string;expires:number}|undefined;
 let fileGeneration=0,activeFileTransfer:FilePageInput&{tabId:number;documentId:string;artifactIds:string[]}|undefined;
-const capabilities=createCapabilitySession(id,()=>binding,policy,validateTab,()=>generation,allowedOrigins,tabId=>command('pin',{tabId}),siteToolsEnabled);
+const capabilities=createCapabilitySession(id,()=>binding,policy,validateTab,()=>generation,allowedOrigins,async tabId=>{const previous=busy;busy=false;try{return await command('pin',{tabId});}finally{busy=previous;}},siteToolsEnabled,(credentialId,binding)=>host('credential.use',{id:credentialId,binding}));
+const compatibility=legacyRecipes((name,payload)=>command('v2.'+name,payload));
 async function inDocument(input:PageInput) {
   if(!binding)throw new PilotError('no_bound_tab');
   if(input.op!=='cancel'){
@@ -23,8 +24,7 @@ async function inDocument(input:PageInput) {
     if(run!==generation||!binding)throw new PilotError('cancelled');
     enforceRecipe(policy(),input.op==='execute'?input.recipe:input.op==='wait'||input.kind==='all'?'extract':input.kind);
   }
-  const results=await chrome.scripting.executeScript({target:{tabId:binding.tabId,documentIds:[binding.documentId]},world:'ISOLATED',func:pageOperation,args:[input]});
-  const result=results[0]?.result;if(!result?.ok)throw new PilotError(result?.code??'execution_failed');return result;
+  return compatibility.operation(input);
 }
 function decisionRequest(question:string,selectedRecipe=recipe):DecisionRequest {
   if(!binding||!snapshot)throw new PilotError('observe_first');
@@ -57,10 +57,9 @@ async function command(name:string,payload:any):Promise<any> {
     enforceRecipe(policy(),'fill');
     const input=z.object({ticket:z.string().uuid(),targetId:z.string().min(1).max(100),stateVersion:z.string().max(200),files:z.array(fileMetadataSchema).min(1).max(20)}).strict().parse(payload);
     if(!binding)throw new PilotError('stale_snapshot');
-    const legacy=snapshot&&input.stateVersion===binding.documentId+':'+snapshot.documentToken;
-    const resolved=legacy?{target:snapshot!.targets.find(t=>t.id===input.targetId),token:snapshot!.documentToken}:await capabilities.fileTarget(input.stateVersion,input.targetId);
+    const resolved=await capabilities.fileTarget(input.stateVersion,input.targetId);
     const {target,token}=resolved;if(target?.kind!=='file')throw new PilotError('stale_snapshot');
-    const version=legacy?undefined:2 as const,bound={...binding},run=generation,fileRun=fileGeneration,transferId=crypto.randomUUID();let committing=false;
+    const version=2 as const,bound={...binding},run=generation,fileRun=fileGeneration,transferId=crypto.randomUUID();let committing=false;
       activeFileTransfer={op:'abort',version,transferId,origin:bound.origin,token,targetId:input.targetId,tabId:bound.tabId,documentId:bound.documentId,artifactIds:input.files.map(f=>f.id)};
     const operation=async(op:FilePageInput['op'],extra:Partial<FilePageInput>={})=>{
       if(run!==generation||fileRun!==fileGeneration||closed||binding?.documentId!==bound.documentId)throw new PilotError('cancelled');
@@ -154,10 +153,12 @@ async function command(name:string,payload:any):Promise<any> {
   if(name==='step'){
     const input=z.object({actionId:z.string().uuid(),stateVersion:z.string().min(1).max(200),expect:z.enum(['change','navigation','none']).optional(),timeoutMs:z.number().int().min(100).max(15000).default(8000)}).strict().parse(payload);
     if(!binding||!snapshot||input.stateVersion!==binding.documentId+':'+snapshot.documentToken||pending?.id!==input.actionId)throw new PilotError('stale_snapshot');
-    const previous=binding,before=snapshot,plan=pending.plan,run=generation,start=performance.now();
+    const previous=binding,before=snapshot,plan=pending.plan,start=performance.now();let run=generation;
     stepActive=plan.recipe==='click';let action:any,actionError:unknown;
     try{
       try{action=await command('execute',{actionId:input.actionId});}catch(error){actionError=error;if(binding||generation!==run)throw error;}
+      // Canonical commit can rebind an owned navigation before returning.
+      if(binding&&binding.documentId!==previous.documentId)run=generation;
       const executed=performance.now();
       if(generation!==run||closed)throw new PilotError('cancelled');
       let changed=false;
@@ -185,14 +186,9 @@ async function command(name:string,payload:any):Promise<any> {
     const {plan}=pending;pending=undefined;busy=true;const run=generation;
     try {
       enforceRecipe(policy(),plan.recipe);
-      let credential:{username:string;password:string}|undefined;
-      if(plan.recipe==='login'){
-        if(!plan.credentialId)throw new PilotError('select_credential');
-        credential=await host('credential.use',{id:plan.credentialId,binding:plan.binding});
-      }
       if(run!==generation)throw new PilotError('cancelled');
       enforceRecipe(policy(),plan.recipe);
-      return await inDocument({op:'execute',origin:plan.binding.origin,token:plan.snapshot.documentToken,targetId:plan.targetId,recipe:plan.recipe,fields:plan.fields,selectOptionIndex:plan.selectOptionIndex,credential});
+      return await inDocument({op:'execute',origin:plan.binding.origin,token:plan.snapshot.documentToken,targetId:plan.targetId,recipe:plan.recipe,fields:plan.fields,selectOptionIndex:plan.selectOptionIndex,credentialId:plan.credentialId});
     } finally {busy=false;}
   }
   if(name==='benchmark') {
@@ -227,7 +223,8 @@ return {
     if(['cancel','status','files.invalidate'].includes(name))return command(name,payload);
     if(running)throw new PilotError('busy');running=true;
     try{
-      const interactive=name==='step'||name==='execute'||name==='files.upload';
+      // V2 commits own their interaction lease, including recipe translations.
+      const interactive=name==='files.upload';
       const writing=name==='files.upload'||pending&&pending.plan.recipe!=='extract';
       if(interactive&&writing&&binding){
         const tabId=binding.tabId,run=generation;

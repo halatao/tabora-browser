@@ -96,6 +96,7 @@ Object.assign(errors,{
   native_host_forbidden:'Chrome zakázal přístup k lokálnímu hostu (native_host_forbidden). Zkontroluj ID rozšíření v allowed_origins a zásady prohlížeče.',
   native_host_start_failed:'Chrome našel host, ale nemůže spustit jeho proces (native_host_start_failed). Zkontroluj spouštěč host.cmd, instalaci Node.js a oprávnění ke spuštění.',
   native_host_exited:'Chrome spustil host, ale proces předčasně skončil (native_host_exited). Je potřeba ověřit chybu při startu hostu.',
+  host_update_required:'Host a rozšíření používají rozdílný protokol. Aktualizuj lokální host a znovu načti rozšíření na chrome://extensions.',
   native_host_protocol_error:'Spojení s hostem selhalo při přenosu zpráv (native_host_protocol_error). Je potřeba ověřit formát zpráv a výstup spouštěče.'
 });
 Object.assign(errors,{tab_in_use:'Tab už používá jiná relace. Nejprve ji uvolni.',session_owned_by_mcp:'Tuto relaci ovládá MCP klient. Můžeš ji zastavit nebo uvolnit.',scope_conflict:'V cílové dostupnosti už existuje klíč pro tohoto poskytovatele. Nejdříve rozhodni, který zachovat.',profile_scope_mismatch:'Položka patří jinému profilu.',unknown_session:'Relace skončila. Obnov seznam relací.',mcp_access_disabled:'Pro tento profil není povolen přístup přes MCP.',busy:'V této relaci právě probíhá jiný krok.'});

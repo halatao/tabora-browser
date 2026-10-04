@@ -4,7 +4,7 @@ import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 const client=new Client({name:'webarena-operator-config',version:'1'}),profileId=process.argv[2];
 const call=async(name,args)=>{const r=await client.callTool({name,arguments:args});const v=JSON.parse(r.content.find(x=>x.type==='text').text);if(r.isError)throw Error(v.code);return v;};
 try{
-  await client.connect(new StdioClientTransport({command:process.execPath,args:[path.resolve(import.meta.dirname,'../dist/host/mcp.js')],stderr:'ignore'}));
+  await client.connect(new StdioClientTransport({command:process.execPath,args:[path.resolve(import.meta.dirname,'../dist/host/mcp.js')],env:process.env,stderr:'ignore'}));
   if(process.argv[3]==='status')console.log(JSON.stringify(await call('browser_provider_status',{profileId})));
   else if(process.argv[3]==='set'){
     const provider=process.argv[4],model=process.argv[5];

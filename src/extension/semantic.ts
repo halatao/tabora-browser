@@ -21,11 +21,11 @@ export function visible(el:Element):boolean{
   }
   return true;
 }
-export function content(el:Element,maxChars=1000000,includeHidden=false):string{
+export function content(el:Element,maxChars=1000000,includeHidden=false,exclude?:Element):string{
   const chunks:string[]=[],seen=new Set<Node>();let size=0,visited=0,lastBoundary=false;
   const append=(value:string,boundary=false)=>{if(size>=maxChars)return;const chunk=value.slice(0,maxChars-size);chunks.push(chunk);size+=chunk.length;lastBoundary=boundary;};
   const visit=(node:Node,depth:number)=>{
-    if(size>=maxChars||seen.has(node))return;if(++visited>100000||depth>128)throw new Error('reader_size_limit');seen.add(node);
+    if(node===exclude||size>=maxChars||seen.has(node))return;if(++visited>100000||depth>128)throw new Error('reader_size_limit');seen.add(node);
     if(node instanceof Text){append(node.data);return;}if(!(node instanceof Element))return;
     if(node.matches('script,style,noscript,template')||!includeHidden&&(node.hasAttribute('hidden')||getComputedStyle(node).display==='none'||getComputedStyle(node).visibility==='hidden'))return;
     if(node.matches('[data-private],[data-sensitive],input[type="password"],[autocomplete="current-password"],[autocomplete="new-password"]')){append('[redacted]');return;}
@@ -47,7 +47,7 @@ export function accessibleName(el:Element,visited=new Set<Element>()):string{
   if(labelled.length)return normalized(labelled.map(e=>accessibleName(e,visited)||content(e,500,true)||'').join(' ')).slice(0,500);
   const aria=el.getAttribute('aria-label');if(aria?.trim())return normalized(aria).slice(0,500);
   if(el instanceof HTMLInputElement||el instanceof HTMLSelectElement||el instanceof HTMLTextAreaElement){
-    const labels=Array.from(el.labels??[]);if(labels.length)return normalized(labels.map(e=>content(e,500,true)).join(' ')).slice(0,500);
+    const labels=Array.from(el.labels??[]);if(labels.length)return normalized(labels.map(e=>content(e,500,true,el)).join(' ')).slice(0,500);
     if(el instanceof HTMLInputElement&&['button','submit','reset'].includes(el.type))return el.value;
   }
   if(el instanceof HTMLImageElement)return el.alt.slice(0,500);

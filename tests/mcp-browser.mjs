@@ -47,7 +47,7 @@ async function fixturePage(context,url){
 }
 try{
   const a=await browser('profile-a');console.log('Profile A connected');const b=await browser('profile-b');console.log('Profile B connected');assert.notEqual(a.profile.id,b.profile.id);
-  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,47);
+  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,48);
   assert.equal((await tool(c,'browser_profiles')).length,2);
   assert.equal(a.profile.mode,'safe');assert.equal(a.profile.vaultEnabled,false);
   await a.rpc('vault.unlock').then(()=>assert.fail('Disabled vault unlocked'),e=>assert.equal(e.message,'vault_disabled'));
@@ -86,9 +86,22 @@ try{
   await tool(c,'browser_session_attach',{sessionId:s1.id,tabId:ordinaryId},'safe_mode_existing_tab');
   const windowCount=await a.panel.evaluate(async()=> (await chrome.windows.getAll({windowTypes:['normal']})).length);
   const t1=await tool(c,'browser_session_open',{sessionId:s1.id,url:origin+'/one'});
-  const t2=await tool(c,'browser_session_open',{sessionId:s1.id,url:origin+'/two'});
+  const t2=await tool(c,'browser_session_open',{sessionId:s1.id,url:origin+'/two',waitForReady:true});
   const t3=await tool(c,'browser_session_open',{sessionId:s2.id,url:origin+'/other'});
   const tb=await tool(c,'browser_session_open',{sessionId:sb.id,url:origin+'/bee'});
+  const identity=await tool(c,'browser_capabilities',{sessionId:s1.id});assert(identity.build.sameBuild);assert.equal(identity.build.host.fingerprint,JSON.parse(await readFile('dist/build-info.json','utf8')).fingerprint);
+  const goal='Select Any in the dropdown.';
+  let panelSession;
+  const panelRpc=async(command,payload)=>{const result=await a.panel.evaluate(input=>chrome.runtime.sendMessage(input),{command,payload:{...payload,...(panelSession?{sessionId:panelSession}:{})}});assert(result.ok,result.code);return result.data;};
+  panelSession=(await panelRpc('session.create',{name:'Panel admission parity',allowedOrigins:[origin]})).id;
+  await panelRpc('tabs.open',{url:origin+'/two',waitForReady:true});
+  const panelRun=await panelRpc('run.start',{goal,provider:'openai-decisions',maxSteps:1,timeoutMs:3000});
+  let panelOutcome;do{panelOutcome=await panelRpc('run.status',{runId:panelRun.id});}while(panelOutcome.status==='running');
+  const mcpRun=await tool(c,'browser_run_start',{sessionId:s1.id,goal,provider:'openai-decisions',maxSteps:1,timeoutMs:3000});
+  let mcpOutcome;do{mcpOutcome=await tool(c,'browser_run_status',{runId:mcpRun.id});}while(mcpOutcome.status==='running');
+  for(const outcome of [panelOutcome,mcpOutcome]){assert.equal(outcome.status,'completed',JSON.stringify(outcome));assert.equal(outcome.execution.engine,'workflow-v2');assert.equal(outcome.execution.goalPlanning,'grounded-goal');assert.equal(outcome.metrics.decisions,0);assert.equal(outcome.metrics.actions,0);}
+  assert.deepEqual(panelOutcome.execution,mcpOutcome.execution);
+  await panelRpc('session.release',{closeCreatedTabs:true});
   assert.equal(t1.groupId,t2.groupId);assert.notEqual(t1.groupId,t3.groupId);assert.equal(t1.windowId,t2.windowId);assert.equal(t1.windowId,t3.windowId);assert.equal(t3.windowId,selectedWindow);
   assert.equal(t1.windowId,await a.panel.evaluate(id=>chrome.tabs.get(id).then(t=>t.windowId),ordinaryId));
   assert.equal(await a.panel.evaluate(async()=> (await chrome.windows.getAll({windowTypes:['normal']})).length),windowCount,'Safe opens new groups without creating windows');
@@ -232,7 +245,7 @@ try{
   assert.equal((await b.rpc('sessions.list')).filter(s=>s.external).length,0);
   assert.deepEqual(errors,[]);
   console.log('Integration assertions passed; closing test resources');
-  report={completedAt:new Date().toISOString(),profiles:2,mcpClients:2,tools:47,passed:true,checks:['provider catalog and exact model validation','MCP provider selection updates panel','provider selection revokes pending actions in only its profile','stdio MCP handshake','automatic MCP access with revocation','Safe new groups in existing windows and existing-tab denial','Safe rejects tabs moved out of the group','Readonly extraction and mutation denial','mode switch revokes prepared action','disabled vault blocks credentials','same-session group reuse','tab ownership','client ownership','section titles and table previews','all extraction bounds reported','atomic menu readiness','atomic navigation rebind','stale revision rejection without replay','profile-scoped unlock','private credential denial across profiles','shared credential fill','scope revocation','parallel profiles','single-use actions','navigation invalidation and reattach','missing host permission','release leaves tabs open','MCP disable revokes sessions','client disconnect cleanup','380px layout'],timings};
+  report={completedAt:new Date().toISOString(),profiles:2,mcpClients:2,tools:48,passed:true,checks:['provider catalog and exact model validation','MCP provider selection updates panel','provider selection revokes pending actions in only its profile','stdio MCP handshake','automatic MCP access with revocation','Safe new groups in existing windows and existing-tab denial','Safe rejects tabs moved out of the group','Readonly extraction and mutation denial','mode switch revokes prepared action','disabled vault blocks credentials','same-session group reuse','tab ownership','client ownership','section titles and table previews','all extraction bounds reported','atomic menu readiness','atomic navigation rebind','stale revision rejection without replay','profile-scoped unlock','private credential denial across profiles','shared credential fill','scope revocation','parallel profiles','single-use actions','navigation invalidation and reattach','missing host permission','release leaves tabs open','MCP disable revokes sessions','client disconnect cleanup','380px layout'],timings};
 }catch(error){console.error('MCP integration failed before cleanup:',error);throw error;}finally{
   for(const c of clients)await c.close().catch(()=>{});
   for(const [index,context] of contexts.entries()){

@@ -1,5 +1,24 @@
 # Browser benchmarks
 
+Latest installed isolated acceptance rerun: [failure investigation and results](acceptance-2026-10-04.md).
+Jev and Codex Luna each completed 9/9 unchanged valid goals. The previous failures
+remain recorded. This is development validation in isolated Chromium, not a new
+matched comparison against the official Chrome lane or a WebArena score.
+
+Controller migration evidence: [development pilot and retained failures](controller-migration-2026-10-04.md).
+It uses an intermediate build; latest validation and pending production deployment
+are documented in the [delivery record](../architecture-delivery-2026-10-04.md).
+The [latest isolated installed validation](controller-migration-final-2026-10-04.md)
+records Luna 7/9 and Jev 5/9, with failures included. It is a separate environment
+and must not be merged into a matched comparison against the official lane.
+
+Latest measured comparison: [live Chrome rerun, 2026-10-04](chrome-comparison-2026-10-04.md).
+Official extension plus the calling Codex agent, Tabora + Jev, and Tabora + Codex
+Luna each completed 9/9 valid goals (means 15.07 s, 2.93 s and 7.23 s respectively).
+Profile/cache equality is not attested; one development-exposed repetition does
+not establish general stability or a speed advantage. It is separate from WebArena.
+The [original failed online pilot](internet-2026-10-04.md) remains historical evidence.
+
 ## What we compare
 
 The primary comparison is **the complete product a user can run**: official
