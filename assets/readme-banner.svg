@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Tabora Browser</title>
+  <desc id="desc">Your browser. Your agent. Your choice. Browser control through MCP, with an optional local vault.</desc>
+  <rect width="1200" height="320" rx="20" fill="#101c19"/>
+  <path d="M800 0V320M880 0V320M960 0V320M1040 0V320M1120 0V320M720 80H1200M720 160H1200M720 240H1200" stroke="#244037"/>
+  <rect x="64" y="70" width="82" height="82" rx="22" fill="#b9e0cd"/>
+  <path d="M88 128L122 94M99 94H122V117" fill="none" stroke="#101c19" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="174" y="106" fill="#b9e0cd" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" letter-spacing="3">OPEN SOURCE · LOCAL FIRST</text>
+  <text x="171" y="157" fill="#f0f5ef" font-family="Segoe UI,Arial,sans-serif" font-size="49" font-weight="700">Tabora Browser</text>
+  <text x="64" y="222" fill="#f0f5ef" font-family="Segoe UI,Arial,sans-serif" font-size="26">Your browser. Your agent. Your choice.</text>
+  <text x="64" y="260" fill="#92afa1" font-family="Segoe UI,Arial,sans-serif" font-size="17">Browser control through MCP, with an optional local vault.</text>
+  <rect x="876" y="77" width="246" height="168" rx="14" fill="#162923" stroke="#416452"/>
+  <circle cx="896" cy="96" r="4" fill="#b9e0cd"/><circle cx="911" cy="96" r="4" fill="#416452"/><circle cx="926" cy="96" r="4" fill="#416452"/>
+  <path d="M876 112H1122" stroke="#416452"/>
+  <rect x="898" y="135" width="147" height="10" rx="5" fill="#b9e0cd"/>
+  <rect x="898" y="161" width="193" height="8" rx="4" fill="#416452"/>
+  <rect x="898" y="184" width="157" height="8" rx="4" fill="#416452"/>
+  <rect x="898" y="207" width="72" height="16" rx="8" fill="#b9e0cd"/>
+</svg>
