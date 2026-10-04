@@ -119,6 +119,16 @@ try {
   await panel.screenshot({path:path.join(dir,'desktop.png'),fullPage:true});await copyFile(path.join(dir,'desktop.png'),'preview.png');
   await panel.setViewportSize({width:380,height:850});assert(await panel.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await panel.locator('#settings-toggle').click();await panel.screenshot({path:path.join(dir,'sidepanel.png'),fullPage:true});
+  // UI catalog behavior must not depend on the developer's SDK login or network.
+  // Decision execution is not mocked; this fixture supplies metadata only.
+  await panel.addInitScript(()=>{
+    const send=chrome.runtime.sendMessage.bind(chrome.runtime);
+    globalThis.__catalogState='connected';
+    chrome.runtime.sendMessage=(message,...args)=>{
+      if(message.command==='provider.catalog'&&message.payload?.provider==='codex-sdk')return Promise.resolve({ok:true,data:{state:globalThis.__catalogState,models:[{id:'fixture-model',label:'Fixture model',isDefault:true}],source:'sdk_catalog'}});
+      return send(message,...args);
+    };
+  });
   await panel.goto(`chrome-extension://${id}/panel.html`);await panel.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Lokální host připojený');
   await panel.locator('#provider').selectOption('codex-sdk');
   await panel.waitForFunction(()=>!document.querySelector('#model').disabled&&document.querySelector('#model').options.length>0,undefined,{timeout:30000});
@@ -131,6 +141,15 @@ try {
   await panel.reload();await panel.waitForFunction(()=>!document.querySelector('#model').disabled);
   assert.equal(await panel.locator('#model').inputValue(),configured.data.configs.find(c=>c.provider==='codex-sdk').model);
   assert.equal(await panel.locator('#connect-provider').isVisible(),false);
+  // An unauthenticated SDK can still list models, but must offer retry/login help.
+  await panel.evaluate(()=>{globalThis.__catalogState='login_required';});
+  await panel.locator('#provider').selectOption('agent');
+  await panel.locator('#provider').selectOption('codex-sdk');
+  await panel.waitForFunction(()=>!document.querySelector('#model').disabled&&!document.querySelector('#connect-provider').hidden);
+  assert.equal(await panel.locator('#connect-provider').isVisible(),true);
+  await panel.evaluate(()=>{globalThis.__catalogState='connected';});
+  await panel.locator('#connect-provider').click();
+  await panel.locator('#connect-provider').waitFor({state:'hidden'});
   // Recover the complete UI after a transient startup failure, without a manual refresh.
   await panel.addInitScript(()=>{
     const send=chrome.runtime.sendMessage.bind(chrome.runtime);let fail=true;
