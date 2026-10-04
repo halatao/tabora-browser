@@ -1,0 +1,66 @@
+{
+  "classification": "development_smoke_not_performance_comparison",
+  "evaluator": "webarena-verified==1.2.3",
+  "clock": "delivery_including_cleanup",
+  "limitations": [
+    "3 known development retrieval tasks only",
+    "one repetition, fixed order, no per-episode state reset",
+    "not a matched official-product timing comparison"
+  ],
+  "episodes": [
+    {
+      "configuration": "jev-latest",
+      "task_id": 77,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 4203,
+      "actual_model": "jev-1.13.0",
+      "evidence_valid": true
+    },
+    {
+      "configuration": "jev-latest",
+      "task_id": 94,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 5688,
+      "actual_model": "jev-1.13.0",
+      "evidence_valid": true
+    },
+    {
+      "configuration": "jev-latest",
+      "task_id": 127,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 2109,
+      "actual_model": "jev-1.13.0",
+      "evidence_valid": true
+    },
+    {
+      "configuration": "gpt-6-luna",
+      "task_id": 77,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 13937,
+      "actual_model": "gpt-6-luna",
+      "evidence_valid": true
+    },
+    {
+      "configuration": "gpt-6-luna",
+      "task_id": 94,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 15032,
+      "actual_model": "gpt-6-luna",
+      "evidence_valid": true
+    },
+    {
+      "configuration": "gpt-6-luna",
+      "task_id": 127,
+      "score": 1.0,
+      "passed": true,
+      "wall_ms": 5812,
+      "actual_model": "gpt-6-luna",
+      "evidence_valid": true
+    }
+  ]
+}

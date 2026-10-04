@@ -19,7 +19,7 @@ const timer = setTimeout(() => { console.error('MCP health check timed out.'); p
 try {
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'dist/host/mcp.js')], env: process.env, stderr: 'pipe' }));
   const tools = (await client.listTools()).tools;
-  if (tools.length !== 13) throw new Error('Unexpected MCP tool count.');
+  if (tools.length !== 47 || !tools.some(t=>t.name==='browser_upload') || !tools.some(t=>t.name==='browser_provider_configure')) throw new Error('Unexpected MCP tool contract.');
   const response = await client.callTool({ name: 'browser_profiles', arguments: {} });
   if (response.isError) throw new Error('MCP profile discovery failed.');
   const profiles = JSON.parse(response.content.find(x => x.type === 'text').text);

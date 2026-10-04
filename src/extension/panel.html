@@ -1,21 +1,43 @@
 <!doctype html>
 <html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tabora Browser</title><link rel="stylesheet" href="panel.css"></head>
 <body><div class="app">
-<header><div class="brand"><span class="brand-icon" aria-hidden="true">↗</span><h1>Tabora</h1></div><button id="settings-toggle" class="quiet" aria-expanded="false" aria-controls="settings">Nastavení</button></header>
+<header><div class="brand"><span class="brand-icon" aria-hidden="true">↗</span><h1>Tabora</h1></div><button id="settings-toggle" class="quiet tools-only" aria-expanded="false" aria-controls="settings">Nastavení</button></header>
 <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Připojuji lokální host…</span><button id="refresh" class="quiet" aria-label="Obnovit spojení">Obnovit</button></div>
 <p id="profile-label" class="profile-label">Profil prohlížeče</p><div id="notice" role="status" aria-live="polite" hidden></div>
+<section id="connection-setup" class="surface" aria-label="Dokončení připojení" hidden>
+<div id="permission-setup" hidden><button id="enable-input" class="primary" type="button">Otevřít správu rozšíření</button><p id="input-status" class="hint">Chrome nepovolil potřebná oprávnění. Ve správě rozšíření znovunačti Taboru a potvrď případný souhlas Chrome. Pak se připojí automaticky.</p></div>
+<div id="mcp-paused" hidden><p class="hint">Přístup agentů byl pro tento profil vypnutý.</p><button id="resume-mcp" class="secondary" type="button">Povolit připojení agentů</button></div>
+<div id="profile-choice" hidden><label for="browser-profile">Profil prohlížeče</label><select id="browser-profile"></select><p class="hint">Název profilu není jednoznačný. Vyber jej jednou.</p></div>
+</section>
 <main id="task">
 <fieldset class="modes"><legend>Režim prohlížeče</legend>
-<label><input type="radio" name="mode" value="safe" checked><span><strong>Safe</strong><small>Nové okno a skupina</small></span></label>
+<label><input type="radio" name="mode" value="safe" checked><span><strong>Safe</strong><small>Vlastní skupina tabů</small></span></label>
 <label><input type="radio" name="mode" value="takeover"><span><strong>Risk</strong><small>Existující taby</small></span></label>
 <label><input type="radio" name="mode" value="readonly"><span><strong>Jen čtení</strong><small>Bez změn na webu</small></span></label>
-</fieldset><p id="mode-description" class="hint">Agent pracuje ve vlastním novém okně. Tvoje otevřené taby zůstávají mimo jeho dosah.</p>
+</fieldset><p id="mode-description" class="hint">Agent otevírá nové taby ve vlastní skupině v tomto okně. Tvoje otevřené taby zůstávají mimo jeho dosah.</p>
 <label for="provider">Kdo rozhoduje</label><select id="provider"><option value="agent">Připojený agent · MCP</option></select>
 <label for="model">Model</label><select id="model" disabled><option value="">Vybírá připojený agent</option></select>
 <div id="provider-connect" class="inline" hidden><span id="provider-state" class="hint">Připoj poskytovatele.</span><button id="connect-provider" class="secondary">Připojit SDK</button></div><p id="agent-hint" class="hint">Ovládání je připravené pro připojený MCP klient.</p>
 <label class="toggle"><span>Používat vault<small>Hesla a sdílené secrets</small></span><input id="vault-enabled" type="checkbox" role="switch"></label>
-<div class="session-row"><span id="session-count" class="hint">Žádná aktivní úloha</span><button id="stop" class="stop">Zastavit</button></div>
-<details id="manual-controls"><summary>Ruční ovládání</summary>
+<div id="active-sessions" class="session-row" hidden><span id="session-count" class="hint">Žádná aktivní úloha</span><button id="stop" class="stop">Zastavit</button></div>
+<section id="attachments" aria-label="Přílohy"><div class="inline tools-only"><button id="add-file" class="secondary" type="button">Přidat soubor</button><button id="refresh-files" class="quiet" type="button">Obnovit přílohy</button></div><input id="file-picker" type="file" multiple hidden><p class="hint tools-only">Agent může soubor předat přímo bez výběru. Sem můžeš soubory také přetáhnout.</p><div id="file-requests"></div><ul id="file-items" aria-live="polite"></ul></section>
+<section class="tools-only" aria-label="Lokální úloha">
+  <label for="run-mode">Typ úlohy</label><select id="run-mode"><option value="read">Zjistit informace</option><option value="action">Provést úlohu</option></select>
+  <label for="run-url">Stránka pro úlohu</label><input id="run-url" type="url" placeholder="https://example.com · nebo připojená stránka">
+  <label for="run-goal">Co má úloha udělat?</label><textarea id="run-goal" rows="3" maxlength="1500" placeholder="Popiš požadovaný výsledek."></textarea>
+  <div id="workflow-settings" hidden>
+    <label class="check"><input id="workflow-visual" type="checkbox"> Použít obraz stránky pro tuto úlohu</label>
+    <label for="vision-provider">Kdo vyhodnotí obraz</label><select id="vision-provider"><option value="">Stejný poskytovatel</option><option value="codex-sdk">Codex SDK · obraz</option><option value="claude-sdk">Claude SDK · obraz</option></select><p class="hint">Obraz se posílá jen při této volbě. Formulářová pole a soukromé oblasti jsou maskované. Použije se model nastavený u zvoleného SDK; Jev zůstává pro textové úlohy.</p>
+    <button id="workflow-load" class="secondary when-idle" type="button">Připravit stránku a načíst pole</button>
+    <div id="workflow-values"></div><button id="workflow-add" class="quiet" type="button" disabled>Přidat hodnotu pole</button>
+    <label for="workflow-file">Předat připravené přílohy</label><select id="workflow-file"><option value="">Bez přílohy</option></select>
+    <label for="workflow-success">Kde ověřit dokončení</label><select id="workflow-success"><option value="">Nejdřív načti stránku</option></select>
+    <label for="workflow-confirmation">Text potvrzení na stránce</label><input id="workflow-confirmation" type="text" maxlength="2000" placeholder="Například: Kontakt byl vytvořen">
+    <p class="hint">Hodnoty a přílohy zadáváš ty. Model vybírá další krok; dokončení ověřuje Tabora na stránce. Hesla patří do vaultu nebo ručního přihlášení.</p>
+  </div>
+  <button id="run-start" class="primary when-idle">Spustit úlohu</button><div id="run-output" role="status" aria-live="polite" hidden></div><button id="run-resume" class="secondary when-idle" hidden>Ruční krok dokončen · obnovit připojení</button>
+</section>
+<details id="manual-controls" class="tools-only"><summary>Ruční ovládání</summary>
 <label for="open-url">Otevřít stránku</label><div class="inline"><input id="open-url" type="url" placeholder="https://example.com"><button id="open-tab" class="secondary when-idle">Otevřít</button></div>
 <div id="existing-tabs"><label for="tab">Existující stránka</label><div class="inline"><select id="tab"></select><button id="pin" class="secondary when-idle">Připojit</button></div></div><p id="bound" class="hint">Otevři stránku pro tuto úlohu.</p>
 <label for="recipe">Akce</label><select id="recipe"><option value="click">Kliknout</option><option value="fill">Vyplnit formulář</option><option value="login">Přihlásit z vaultu</option><option value="extract">Přečíst stránku nebo tabulku</option></select>
@@ -31,8 +53,8 @@
 <section id="vault" hidden><details id="vault-details"><summary>Správa vaultu</summary><div class="actions"><button id="unlock" class="primary">Odemknout přes Windows</button><button id="lock" class="secondary">Zamknout</button></div><p id="vault-state" class="hint">Vault je zamčený.</p><p class="hint">Lokální šifrování a Windows DPAPI. Odemčení nevyžaduje biometriku; po 10 minutách nečinnosti se přístup zamkne.</p>
 <form id="vault-form"><label for="vault-label">Název účtu</label><input id="vault-label" required maxlength="100"><label for="vault-scope">Dostupnost</label><select id="vault-scope"><option value="profile">Jen tento profil</option><option value="shared">Sdílený mezi profily</option></select><label for="vault-origin">HTTPS origin</label><input id="vault-origin" required type="url" placeholder="https://app.example.com"><label for="vault-user">Přihlašovací jméno</label><input id="vault-user" required autocomplete="off"><label for="vault-password">Heslo</label><input id="vault-password" required type="password" autocomplete="new-password"><button class="primary" type="submit">Uložit účet</button></form><div id="vault-items"></div></details></section>
 </main>
-<section id="settings" hidden><h2>Nastavení</h2><div id="profile-choice" hidden><label for="browser-profile">Profil prohlížeče</label><select id="browser-profile"></select><p class="hint">Prohlížeč neposkytuje název profilu přímo. Pokud máš Taboru ve více profilech, vyber jej jednou.</p></div><p id="profile-id" class="hint"></p><label class="check"><input id="mcp-enabled" type="checkbox" checked> Povolit přístup přes MCP</label>
+<section id="settings" class="tools-only" hidden><h2>Technické nástroje</h2><p id="profile-id" class="hint"></p><label class="check"><input id="mcp-enabled" type="checkbox" checked> Povolit přístup přes MCP</label>
 <div id="provider-settings" hidden><label for="provider-connection">Připojení poskytovatele</label><select id="provider-connection"></select><div id="provider-key-fields" hidden><label for="provider-key">API klíč do vaultu</label><input id="provider-key" type="password" autocomplete="new-password"><label for="provider-key-scope">Dostupnost klíče</label><select id="provider-key-scope"><option value="profile">Jen tento profil</option><option value="shared">Sdílený mezi profily</option></select><button id="save-provider-key" class="secondary">Uložit klíč</button></div></div>
 <details id="compare"><summary>Diagnostika a srovnání</summary><p class="hint">Test rozhodování nad posledním načteným stavem. Může spotřebovat API kredit.</p><label for="expected">Očekávaný cíl</label><select id="expected"><option value="">Bez hodnocení správnosti</option></select><label for="repetitions">Opakování</label><input id="repetitions" type="number" min="1" max="10" value="1"><div class="actions"><button id="benchmark" class="primary when-idle">Porovnat poskytovatele</button><button id="benchmark-stop" class="stop">Zastavit</button></div><p id="benchmark-state" class="hint">Zatím žádné výsledky.</p><div id="benchmark-cards"></div><button id="export-results" class="secondary" hidden>Stáhnout JSON</button></details></section>
-<footer>Tabora Browser <span>0.3 · Lokální připojení</span></footer>
+<footer>Tabora Browser <span id="app-version">Lokální připojení</span></footer>
 </div><script type="module" src="panel.js"></script></body></html>

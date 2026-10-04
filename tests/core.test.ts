@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { NativeDecoder, encodeMessage } from '../src/host/codec.js';
 import { Vault, type KeyProtector } from '../src/host/vault.js';
-import { exactOrigin, parseChoice, requestSchema, MAX_MESSAGE, type DecisionRequest } from '../src/shared.js';
+import { exactOrigin, parseChoice, requestSchema, decisionGuidance, decisionPrompt, MAX_MESSAGE, type DecisionRequest } from '../src/shared.js';
 import { withoutTools, guardResponseEvent, createCodexProxy } from '../src/host/codex-proxy.js';
 import { jevDecision } from '../src/host/adapters.js';
 import { summarize } from '../src/benchmark.js';
@@ -91,6 +91,35 @@ test('Jev uses native choice schema and rejects a provider-selected foreign ID',
   };
   assert.equal((await jevDecision(request,config,'FAKE',new AbortController().signal,mock)).choiceId,'continue');
   await assert.rejects(jevDecision(request,config,'FAKE',new AbortController().signal,async()=>Response.json({model:'fixture',answers:{next:{type:'choice',choice:'attack',confidence:1}},usage:{input_tokens:1,output_tokens:1}})));
+});
+
+test('Jev and SDK guidance preserve escalation criteria after inspect is removed',async()=>{
+  const retrieval={...request,question:'Find the inventory count',choices:[{id:'reports',description:'Click Reports (menu contains Inventory)'},{id:'ask_user',description:'A required user parameter, credential or authorization is missing.'}]};
+  for(const choices of [retrieval.choices,[...retrieval.choices,{id:'inspect',description:'Read page body'}]]){
+    const next={...retrieval,choices},guidance=decisionGuidance(next);
+    assert(guidance.includes('only according to its supplied description'));assert(guidance.includes('Uncertainty alone does not meet a criterion'));
+    assert(!guidance.includes('if uncertain'));assert(!guidance.includes('insufficient choose ask_user'));
+    assert(decisionPrompt(next).includes(guidance));
+    await jevDecision(next,{provider:'typesafe-jev',model:'fixture-model',timeoutMs:30000},'FAKE',new AbortController().signal,async(_url,init)=>{
+      const sent=JSON.parse(init!.body as string);assert(sent.questions.next.instructions.endsWith(guidance));
+      assert.equal(sent.questions.next.criteria.ask_user,retrieval.choices[1].description);
+      return Response.json({model:'fixture-model',answers:{next:{type:'choice',choice:'reports',confidence:0.9}},usage:{input_tokens:10,output_tokens:1}});
+    });
+  }
+});
+test('authenticated SDK proxy preserves SDK headers, narrows the envelope and accepts SSE without MIME',async()=>{
+  let count=0;
+  const proxy=await createCodexProxy('',new AbortController().signal,async(url,init)=>{
+    count++;assert.equal(url,'https://chatgpt.com/backend-api/codex/responses');
+    assert.equal((init!.headers as Record<string,string>).authorization,'Bearer FAKE-sdk-login');assert.equal((init!.headers as Record<string,string>).originator,'codex_cli_rs');
+    const sent=JSON.parse(init!.body as string);assert.equal(sent.input.length,1);assert.deepEqual(sent.tools,[]);assert(!JSON.stringify(sent).includes('PRIVATE_INSTRUCTIONS'));
+    return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('data: {"type":"response.output_item.added","item":{"type":"message"}}\r'));c.enqueue(new TextEncoder().encode('\n\r\n'));c.close();}}));
+  },{request,model:'fixture',sdkUpstream:'https://chatgpt.com/backend-api/codex/responses'});
+  try{
+    const response=await fetch(proxy.url+'/responses',{method:'POST',headers:{authorization:'Bearer FAKE-sdk-login',originator:'codex_cli_rs'},body:JSON.stringify({model:'fixture',stream:true,input:[{type:'additional_tools',tools:[{name:'shell'}]},{role:'user',content:'PRIVATE_INSTRUCTIONS'}]})});
+    assert.equal(response.status,200);assert((await response.text()).includes('message'));assert.equal(count,1);assert.equal(proxy.failureCode,undefined);assert.equal(proxy.envelopeStats?.embeddedToolsRemoved,1);
+    assert.equal((await fetch(proxy.url+'/responses',{method:'POST',headers:{authorization:'Bearer FAKE-sdk-login',origin:'https://evil.test'},body:'{}'})).status,403);assert.equal(count,1);
+  }finally{proxy.close();}
 });
 test('benchmark never rewards fast failures or unknown prices',()=>{
   const base={requestId:'x',stateVersion:'1',provider:'codex-sdk' as const,model:'fixture'};

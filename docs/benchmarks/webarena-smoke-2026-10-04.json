@@ -1,0 +1,100 @@
+{
+  "classification": "development_smoke_not_performance_comparison",
+  "evaluator": "webarena-verified==1.2.3",
+  "limitations": [
+    "Three known development retrieval tasks from shopping-admin only",
+    "Different clock boundaries; do not calculate a speedup",
+    "Fixed order, one repetition, shared profile, no per-episode state reset",
+    "Official extension was driven by an external agent; closed backend model unverified",
+    "Earlier failed setup and invalid captures are retained privately"
+  ],
+  "episodes": [
+    {
+      "configuration": "official_extension_external_agent",
+      "task_id": 77,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 49359,
+      "evidence_valid": true,
+      "clock": "operator_capture_window"
+    },
+    {
+      "configuration": "official_extension_external_agent",
+      "task_id": 94,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 41172,
+      "evidence_valid": true,
+      "clock": "operator_capture_window"
+    },
+    {
+      "configuration": "official_extension_external_agent",
+      "task_id": 127,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 20344,
+      "evidence_valid": true,
+      "clock": "operator_capture_window"
+    },
+    {
+      "configuration": "tabora_codex_luna",
+      "task_id": 77,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 35703,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "gpt-6-luna"
+    },
+    {
+      "configuration": "tabora_codex_luna",
+      "task_id": 94,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 30672,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "gpt-6-luna"
+    },
+    {
+      "configuration": "tabora_codex_luna",
+      "task_id": 127,
+      "passed": false,
+      "score": 0.0,
+      "wall_ms": 6859,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "gpt-6-luna"
+    },
+    {
+      "configuration": "tabora_jev_latest",
+      "task_id": 77,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 6188,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "jev-1.13.0"
+    },
+    {
+      "configuration": "tabora_jev_latest",
+      "task_id": 94,
+      "passed": true,
+      "score": 1.0,
+      "wall_ms": 7453,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "jev-1.13.0"
+    },
+    {
+      "configuration": "tabora_jev_latest",
+      "task_id": 127,
+      "passed": false,
+      "score": 0.0,
+      "wall_ms": 5000,
+      "evidence_valid": true,
+      "clock": "delivery_including_cleanup",
+      "actual_model": "jev-1.13.0"
+    }
+  ]
+}

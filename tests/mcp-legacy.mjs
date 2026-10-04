@@ -10,7 +10,7 @@ const call=(method,params)=>new Promise((resolve,reject)=>{const id=++next,timer
 try{
   const initialized=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'legacy-stdio-test',version:'1'}});assert.equal(initialized.protocolVersion,'2025-03-26');
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
-  assert.equal((await call('tools/list',{})).tools.length,13);
+  const listed=(await call('tools/list',{})).tools;assert.equal(listed.length,47);assert(listed.some(t=>t.name==='browser_upload'));assert(listed.some(t=>t.name==='browser_provider_configure'));
   const result=await call('tools/call',{name:'browser_profiles',arguments:{}});assert.deepEqual(JSON.parse(result.content[0].text),[]);
   const brokerPath=path.resolve('dist/host/broker.js').replaceAll("'","''");
   const stopScript=`$ownedBroker = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.ParentProcessId -eq ${child.pid} -and $_.CommandLine -like '*${brokerPath}*' }); if ($ownedBroker.Count -ne 1) { throw 'Test broker identity is ambiguous' }; Stop-Process -Id $ownedBroker[0].ProcessId -Force`;

@@ -19,17 +19,21 @@ await writeFile('dist/extension/manifest.json', JSON.stringify({
   manifest_version: 3, name: 'Tabora Browser', version: JSON.parse(await readFile('package.json','utf8')).version, key,
   description: 'Local browser control for AI agents, with MCP and an optional encrypted vault.',
   minimum_chrome_version: '116',
-  permissions: ['activeTab', 'tabs', 'tabGroups', 'scripting', 'nativeMessaging', 'storage', 'sidePanel'],
+  // Chrome does not allow debugger as an optional permission. Core browser
+  // control permissions are approved together when the extension is installed.
+  permissions: ['activeTab', 'tabs', 'tabGroups', 'scripting', 'nativeMessaging', 'storage', 'sidePanel','webNavigation','debugger','downloads'],
+  optional_permissions:[],
   host_permissions: ['http://*/*', 'https://*/*'],
   background: { service_worker: 'background.js', type: 'module' },
   action: { default_title: 'Tabora Browser' },
   side_panel: { default_path: 'panel.html' },
-  options_page: 'panel.html',
+  options_page: 'panel.html?tools',
   content_security_policy: { extension_pages: "script-src 'self'; object-src 'none'; connect-src 'none'; base-uri 'none'" },
 }, null, 2));
 await build({ entryPoints: ['src/extension/background.ts','src/extension/panel.ts'], outdir:'dist/extension', bundle:true, format:'esm', platform:'browser', target:'chrome116', sourcemap:true });
-await build({ entryPoints: ['src/host/main.ts','src/host/broker.ts','src/host/mcp.ts','src/host/provider-worker.ts'], outdir:'dist/host', bundle:true, packages:'external', format:'esm', platform:'node', target:'node22', sourcemap:true });
+await build({entryPoints:['src/extension/sensor.ts'],outdir:'dist/extension',bundle:true,format:'iife',platform:'browser',target:'chrome116',sourcemap:true});
+await build({ entryPoints: ['src/host/main.ts','src/host/broker.ts','src/host/mcp.ts','src/host/provider-worker.ts','src/host/document-worker.ts'], outdir:'dist/host', bundle:true, packages:'external', format:'esm', platform:'node', target:'node22', sourcemap:true });
 for (const file of ['panel.html','panel.css']) await copyFile('src/extension/'+file,'dist/extension/'+file);
 await copyFile('scripts/dpapi.ps1','dist/host/dpapi.ps1');
-await writeFile('mcp.config.json',JSON.stringify({mcpServers:{'tabora-browser':{command:process.execPath,args:[path.join(root,'dist/host/mcp.js')],...(process.env.TABORA_STATE_DIR?{env:{TABORA_STATE_DIR:process.env.TABORA_STATE_DIR}}:{})}}},null,2)+'\n');
+await writeFile('mcp.config.json',JSON.stringify({mcpServers:{'tabora-browser':{command:process.execPath,args:[path.join(root,'dist/host/mcp.js')],env:{TABORA_FILE_ROOTS:process.env.TABORA_FILE_ROOTS??JSON.stringify([root]),...(process.env.TABORA_STATE_DIR?{TABORA_STATE_DIR:process.env.TABORA_STATE_DIR}:{})}}}},null,2)+'\n');
 console.log('Built extension: ' + extensionId);

@@ -58,10 +58,10 @@ async function worker() {
     throw new Error(`Stale managed profile lock: ${lockPath}. Inspect that profile and remove the lock only after confirming no browser is using it.`);
   }
   await lock.writeFile(JSON.stringify({ pid: process.pid })); await lock.close();
-  let context, server, closing = false;
+  let context, server, closing = false, shutdown;
   const info = { running: true, ready: false, name: options.name, origins: [], headless: options.headless };
-  const close = async () => {
-    if (closing) return; closing = true; info.ready = false;
+  const close = () => shutdown ??= (async () => {
+    closing = true; info.ready = false;
     try {
       if (context) {
         let timer;
@@ -71,9 +71,9 @@ async function worker() {
       }
     } finally {
       await unlink(lockPath).catch(e => { if (e.code !== 'ENOENT') throw e; });
-      server?.close();
+      if (server?.listening) await new Promise(resolve => server.close(resolve));
     }
-  };
+  })();
   try {
     server = createServer(socket => {
       socket.setTimeout(2000, () => socket.destroy()); let data = '';

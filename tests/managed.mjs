@@ -64,6 +64,7 @@ try {
    const names=JSON.parse(profiles.content.find(x=>x.type==='text').text);assert.equal(names.find(p=>p.id===automatic.profileId).name,'automatic');
   }finally{await autoClient.close();}
   await browser('stop','--profile','automatic');
+  await Promise.all([browser('stop','--profile','test'),browser('stop','--profile','test')]);
   console.log('PASS: automatic managed installation, idempotent start, MCP -> native -> extension -> real DOM click, shutdown and persistent profile restart.');
 } finally {
   await client.close(); await browser('stop', '--profile', 'test');await browser('stop','--profile','automatic');

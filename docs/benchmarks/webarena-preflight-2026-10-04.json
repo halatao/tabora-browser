@@ -1,0 +1,27 @@
+{
+  "status": "blocked_before_execution",
+  "observed_on": "2026-10-04",
+  "free_bytes": 157162659840,
+  "map_archive_bytes": 187334164480,
+  "map_urls": [
+    "https://webarena-map-server-data.s3.amazonaws.com/osm_tile_server.tar",
+    "https://webarena-map-server-data.s3.amazonaws.com/nominatim_volumes.tar",
+    "https://webarena-map-server-data.s3.amazonaws.com/osrm_routing.tar"
+  ],
+  "wikipedia": [
+    {
+      "url": "http://metis.lti.cs.cmu.edu/webarena-images/wikipedia_en_all_maxi_2022-05.zim",
+      "status": 403
+    },
+    {
+      "url": "https://metis.lti.cs.cmu.edu/webarena-images/wikipedia_en_all_maxi_2022-05.zim",
+      "error": "URLError"
+    }
+  ],
+  "additional_gates": [
+    "All six original environments and resets",
+    "Equivalent isolated browser profiles with vault off",
+    "Common operator clock for official connector and Tabora",
+    "Pinned product build and enforced oracle isolation"
+  ]
+}

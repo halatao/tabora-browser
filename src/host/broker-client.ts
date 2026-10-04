@@ -7,6 +7,7 @@ import { DpapiProtector } from './vault.js';
 import { connectPipe, type Peer } from './ipc.js';
 import { PilotError } from '../shared.js';
 import { resolveStateDirectory } from '../../scripts/state-directory.mjs';
+import {configuredFileRoots} from './file-roots.js';
 
 export const stateDir=resolveStateDirectory(process.env,path.join(import.meta.dirname,'../../dist/native-host/state.json'));
 export function brokerPipe(directory=stateDir){
@@ -34,6 +35,7 @@ export async function connectBroker(role:'extension'|'mcp'):Promise<Peer>{
     const wrapped=await readFile(path.join(stateDir,'broker-auth.bin'));
     const bytes=await protector().unprotect(wrapped);
     let token:string;try{token=z.string().regex(/^[a-f0-9]{64}$/).parse(bytes.toString());}finally{bytes.fill(0);}
-    await peer.call('authenticate',{role,token},15000);return peer;
+    const fileRoots=role==='mcp'?configuredFileRoots(process.env,process.cwd()):[];
+    await peer.call('authenticate',{role,token,fileRoots},15000);return peer;
   }catch(error){peer.close();throw error;}
 }

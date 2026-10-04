@@ -13,7 +13,8 @@ for await(const line of createInterface({input:process.stdin})){
   else if(method==='thread/start'){
     assert.equal(params.ephemeral,true);assert.equal(params.approvalPolicy,'never');assert.equal(params.sandbox,'read-only');
     assert.deepEqual(params.dynamicTools,[]);assert.deepEqual(params.environments,[]);assert(params.baseInstructions.length<500);
-    assert.deepEqual(params.config,{model_reasoning_effort:'low',mcp_servers:{'inherited.server':{enabled:false}},plugins:{'fixture@marketplace':{enabled:false}}});
+    assert.deepEqual(params.config.mcp_servers,{'inherited.server':{enabled:false}});assert.deepEqual(params.config.plugins,{'fixture@marketplace':{enabled:false}});
+    assert.equal(params.config.model_reasoning_effort,'low');assert.equal(params.config.orchestrator.mcp.enabled,false);assert.equal(params.config.skills.include_instructions,false);assert.equal(params.config.include_environment_context,false);
     threadId=`thread-${++sequence}`;send({id,result:{thread:{id:threadId},model:mode==='wrong-model'?'substituted-model':params.model}});
   }else if(method==='mcpServerStatus/list'){
     assert.equal(params.threadId,threadId);

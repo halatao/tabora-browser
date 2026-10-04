@@ -23,8 +23,40 @@ try {
   const initial=await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}));
   assert.equal(initial.data.profile.mode,'safe');assert.equal(initial.data.profile.mcpEnabled,true);assert.equal(initial.data.profile.vaultEnabled,false);
   assert.equal(await panel.locator('input[id*=model]').count(),0);assert.equal(await panel.locator('#model').evaluate(el=>el.tagName),'SELECT');
+  assert.equal(await panel.locator('#settings-toggle').isVisible(),false);
+  assert.equal(await panel.locator('#manual-controls').isVisible(),false);
+  assert.equal(await panel.locator('#run-start').isVisible(),false);
+  assert.equal(await panel.locator('#attachments').isVisible(),false);
+  assert.equal(await panel.locator('#vault').isVisible(),false);
+  assert.equal(await panel.locator('#active-sessions').isVisible(),false);
+  // Verify the shipped permissions in Chrome, without promoting optional
+  // permissions in this fixture or mocking a successful permission request.
+  assert(manifest.permissions.includes('debugger'));assert(manifest.permissions.includes('downloads'));
+  assert(!(manifest.optional_permissions??[]).includes('debugger'));
+  assert.equal(await panel.evaluate(()=>chrome.permissions.contains({permissions:['debugger','downloads']})),true);
+  await panel.locator('#connection-setup').waitFor({state:'hidden'});
+  // Missing permissions must direct the user to Chrome instead of retrying
+  // an API that cannot grant debugger. Simulate absence, never consent.
+  await panel.evaluate(()=>{
+    globalThis.__realContains=chrome.permissions.contains.bind(chrome.permissions);
+    chrome.permissions.contains=async()=>false;
+    chrome.permissions.request=async()=>{throw new Error('Unexpected runtime permission request');};
+  });
+  await panel.locator('#refresh').click();await panel.locator('#enable-input').waitFor({state:'visible'});
+  const managerPage=context.waitForEvent('page');await panel.locator('#enable-input').click();
+  const manager=await managerPage;await manager.waitForURL(`chrome://extensions/?id=${id}`);await manager.close();
+  await panel.evaluate(()=>{chrome.permissions.contains=globalThis.__realContains;});
+  await panel.locator('#refresh').click();await panel.locator('#connection-setup').waitFor({state:'hidden'});
+  await panel.evaluate(()=>chrome.runtime.sendMessage({command:'profile.update',payload:{mcpEnabled:false}}));
+  await panel.reload();await panel.locator('#resume-mcp').waitFor({state:'visible'});
+  assert.equal((await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}))).data.profile.mcpEnabled,false);
+  await panel.locator('#resume-mcp').click();await panel.locator('#mcp-paused').waitFor({state:'hidden'});
   await panel.setViewportSize({width:380,height:850});assert(await panel.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await panel.screenshot({path:'preview-sidepanel.png',fullPage:true});
+  await panel.setViewportSize({width:1150,height:1050});await panel.screenshot({path:'preview-panel-desktop.png',fullPage:true});
+  // The options page preserves manual workflows without adding them to the main panel.
+  assert.equal(manifest.options_page,'panel.html?tools');
+  await panel.goto(`chrome-extension://${id}/panel.html?tools`);await panel.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Lokální host připojený');
   await panel.locator('input[name=mode][value=takeover]').check();await panel.waitForFunction(()=>!document.querySelector('#existing-tabs').hidden);
   await panel.locator('#manual-controls').evaluate(el=>el.open=true);
   await panel.locator('#tab').selectOption({label:'Pilot testovací stránka'});
@@ -87,13 +119,28 @@ try {
   await panel.screenshot({path:path.join(dir,'desktop.png'),fullPage:true});await copyFile(path.join(dir,'desktop.png'),'preview.png');
   await panel.setViewportSize({width:380,height:850});assert(await panel.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await panel.locator('#settings-toggle').click();await panel.screenshot({path:path.join(dir,'sidepanel.png'),fullPage:true});
+  await panel.goto(`chrome-extension://${id}/panel.html`);await panel.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Lokální host připojený');
   await panel.locator('#provider').selectOption('codex-sdk');
   await panel.waitForFunction(()=>!document.querySelector('#model').disabled&&document.querySelector('#model').options.length>0,undefined,{timeout:30000});
   assert.equal(await panel.locator('#provider-connection').inputValue(),'sdk');
+  assert.equal(await panel.locator('#connect-provider').isVisible(),false);
   const configured=await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}));
   assert.equal(configured.data.profile.activeProvider,'codex-sdk');
   assert.equal(configured.data.configs.find(c=>c.provider==='codex-sdk').connection,'sdk');
   assert.equal(configured.data.configs.find(c=>c.provider==='codex-sdk').model,await panel.locator('#model').inputValue());
+  await panel.reload();await panel.waitForFunction(()=>!document.querySelector('#model').disabled);
+  assert.equal(await panel.locator('#model').inputValue(),configured.data.configs.find(c=>c.provider==='codex-sdk').model);
+  assert.equal(await panel.locator('#connect-provider').isVisible(),false);
+  // Recover the complete UI after a transient startup failure, without a manual refresh.
+  await panel.addInitScript(()=>{
+    const send=chrome.runtime.sendMessage.bind(chrome.runtime);let fail=true;
+    chrome.runtime.sendMessage=(message,...args)=>{
+      if(fail&&message.command==='sessions.list'){fail=false;return Promise.resolve({ok:false,code:'native_host_unavailable'});}
+      return send(message,...args);
+    };
+  });
+  await panel.reload();await panel.waitForFunction(()=>document.querySelector('#provider').value==='codex-sdk'&&!document.querySelector('#model').disabled);
+  assert.equal(await panel.locator('#model').inputValue(),configured.data.configs.find(c=>c.provider==='codex-sdk').model);
   await panel.locator('#provider').selectOption('agent');
   await panel.waitForFunction(()=>document.querySelector('#provider-connect').hidden);
   await panel.locator('#vault-enabled').uncheck();await panel.waitForFunction(()=>document.querySelector('#vault').hidden);
@@ -101,7 +148,7 @@ try {
   await panel.locator('#manual-controls').evaluate(el=>el.open=false);await panel.locator('#vault-details').evaluate(el=>el.open=false);
   await panel.screenshot({path:'preview-sidepanel.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log('PASS: extension/native host, pinning, form batch, replay rejection, stale DOM, table extraction + CSV, real DPAPI credential fill, background-tab click, cross-origin rejection, four-provider reporting + JSON, 380px layout.');
+  console.log('PASS: minimal panel, actual Chrome debugger/download permissions, missing-permission handoff without runtime requests, preserved MCP revocation, automatic SDK catalog + model persistence, options workflows, native host, pinning, form batch, replay rejection, stale DOM, table + CSV, DPAPI credential fill, background click, cross-origin rejection, four-provider report, responsive layout.');
 }catch(error){
   console.error('Browser test failed before cleanup:',error);
   const panel=context?.pages().find(p=>p.url().startsWith('chrome-extension:'));

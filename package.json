@@ -1,10 +1,10 @@
 {
   "name": "tabora-browser",
-  "version": "0.3.0",
+  "version": "0.5.5",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -21,12 +21,24 @@
     "browser": "node scripts/browser.mjs",
     "doctor": "node scripts/doctor.mjs",
     "test:setup": "node --test tests/setup.test.mjs",
-    "test:managed": "node tests/managed.mjs"
+    "test:managed": "node tests/managed.mjs",
+    "test:files": "node tests/files-browser.mjs",
+    "test:capabilities": "node tests/capabilities-browser.mjs",
+    "test:background": "node tests/background-browser.mjs",
+    "test:widgets": "node --import tsx tests/widget-browser.mjs",
+    "test:visual": "node --import tsx tests/visual-workflow-browser.mjs",
+    "test:workflow": "node --import tsx tests/workflow-browser.mjs",
+    "test:auth": "node --import tsx tests/auth-browser.mjs",
+    "test:webmcp": "node tests/webmcp-native.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.285",
     "@modelcontextprotocol/server": "2.2.0",
+    "@napi-rs/canvas": "1.0.10",
     "@openai/codex-sdk": "0.159.2",
+    "@tesseract.js-data/eng": "1.0.0",
+    "pdfjs-dist": "6.3.289",
+    "tesseract.js": "7.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

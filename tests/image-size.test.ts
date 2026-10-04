@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {imageSize} from '../src/image-size.js';
+test('image dimensions reject huge decoding allocations before native decode',()=>{const bytes=new Uint8Array(24);bytes.set([137,80,78,71,13,10,26,10]);const view=new DataView(bytes.buffer);view.setUint32(16,200);view.setUint32(20,100);assert.deepEqual(imageSize(bytes),{width:200,height:100});view.setUint32(16,100000);assert.throws(()=>imageSize(bytes),/image_size_limit/);assert.throws(()=>imageSize(new Uint8Array([255,216,0])),/invalid_image/);});

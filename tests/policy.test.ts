@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {enforceSafeTab,enforceRecipe} from '../src/extension/policy.js';
+import {enforceSafeTab,enforceRecipe,ownsCleanupTab} from '../src/extension/policy.js';
 import {chooseBrowserProfile} from '../src/host/browser-profiles.js';
 import {sdkEnvironment} from '../src/host/sdk-environment.js';
 import {PilotError} from '../src/shared.js';
 const code=(value:string)=>(e:unknown)=>e instanceof PilotError&&e.code===value;
-test('Safe requires session-created tab, dedicated window and current group',()=>{
+test('Finished-session cleanup excludes user tabs, moved tabs and changed owners in every mode',()=>{
+ const scope={createdTabs:new Set([7]),windowId:2,groupId:3};
+ const tab={id:7,windowId:2,groupId:3};
+ assert(ownsCleanupTab(tab,scope,'session-a','session-a'));
+ for(const candidate of [{...tab,id:8},{...tab,groupId:-1},{...tab,windowId:4}])assert(!ownsCleanupTab(candidate,scope,'session-a','session-a'));
+ assert(!ownsCleanupTab(tab,scope,'session-b','session-a'));
+ assert(!ownsCleanupTab(tab,{...scope,groupId:undefined},'session-a','session-a'));
+});
+test('Safe requires session-created tab, assigned window and current group',()=>{
  const scope={createdTabs:new Set([7]),safeWindowId:2,groupId:3};
  enforceSafeTab({mode:'safe'},{id:7,windowId:2,groupId:3} as chrome.tabs.Tab,scope);
  for(const tab of [{id:8,windowId:2,groupId:3},{id:7,windowId:9,groupId:3},{id:7,windowId:2,groupId:-1}])assert.throws(()=>enforceSafeTab({mode:'safe'},tab as chrome.tabs.Tab,scope),code('safe_mode_existing_tab'));

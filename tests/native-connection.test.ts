@@ -34,7 +34,8 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
     ports.push(port);return port;
   };
   globalThis.chrome={runtime,storage:{local:{setAccessLevel:async()=>{},get:async()=>({profile:stored}),set:async(value:any)=>{stored=value.profile;}}},
-    tabs:{onRemoved:{addListener:()=>{}},onUpdated:{addListener:()=>{}}},
+    tabs:{onRemoved:{addListener:()=>{}},onUpdated:{addListener:()=>{}},onCreated:{addListener:()=>{}}},
+    webNavigation:{onBeforeNavigate:{addListener:()=>{}}},
     sidePanel:{setPanelBehavior:async()=>{}}
   } as any;
   const rpc=()=>new Promise<any>(resolve=>panelListener({command:'sessions.list'},{id:runtime.id,url:runtime.getURL('panel.html')},resolve));
