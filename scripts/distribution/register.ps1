@@ -5,7 +5,7 @@ $OutputEncoding = [Console]::OutputEncoding
 $taboraRoot = [IO.Path]::GetFullPath($env:TABORA_INSTALL_ROOT)
 if ($CheckOnly) {
   if ($env:TABORA_PREFLIGHT_EXTENSION_ID -notmatch '^[a-p]{32}$') { throw 'invalid_extension_id' }
-  $taboraConfig = @{extensionId=$env:TABORA_PREFLIGHT_EXTENSION_ID}
+  $taboraConfig = @{extensionId=$env:TABORA_PREFLIGHT_EXTENSION_ID;installKind=$env:TABORA_PREFLIGHT_EXTENSION_CHANNEL}
 } else { $taboraConfig = Get-Content -LiteralPath (Join-Path $taboraRoot 'installation.json') -Raw -Encoding UTF8 | ConvertFrom-Json }
 $taboraLauncher = Join-Path $taboraRoot 'tabora.exe'
 $taboraManifest = Join-Path $taboraRoot 'native-host.json'
@@ -72,7 +72,13 @@ if ($Unregister) {
   Write-Output 'Owned registrations removed. User data retained.'
   exit
 }
-$taboraDefinition = @{name='com.tabora.browser';description='Tabora Browser';path=$taboraLauncher;type='stdio';allowed_origins=@("chrome-extension://$($taboraConfig.extensionId)/")}
+$taboraOrigins = @("chrome-extension://$($taboraConfig.extensionId)/")
+if ($taboraConfig.installKind -eq 'store') {
+  $taboraIdentities = Get-Content -LiteralPath (Join-Path $taboraRoot "versions\$($taboraConfig.current)\extension-identities.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($taboraIdentities.schema -ne 1 -or $taboraIdentities.unpacked -ne $taboraConfig.extensionId -or $taboraIdentities.store -notmatch '^[a-p]{32}$') { throw 'invalid_extension_identities' }
+  $taboraOrigins += "chrome-extension://$($taboraIdentities.store)/"
+}
+$taboraDefinition = @{name='com.tabora.browser';description='Tabora Browser';path=$taboraLauncher;type='stdio';allowed_origins=$taboraOrigins}
 [IO.File]::WriteAllText($taboraManifest, ($taboraDefinition | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 foreach ($taboraBrowser in $taboraBrowsers) {
   $taboraKey = "HKCU:\Software\$taboraBrowser\NativeMessagingHosts\com.tabora.browser"
@@ -99,4 +105,4 @@ foreach ($taboraClient in $taboraClients) {
     throw 'mcp_registration_failed: native registration is installed; repair after resolving the client error.'
   }
 }
-Write-Output 'Tabora registrations installed. Reconnect MCP and load extension-unpacked once in the intended browser profile.'
+Write-Output 'Tabora registrations installed. Reconnect MCP and install the selected extension channel in the intended browser profile.'

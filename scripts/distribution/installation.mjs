@@ -7,6 +7,7 @@ import {json, atomicJson, confined, plainDirectory,mapBounded,files} from './fil
 import {hashFile} from './release.mjs';
 import {compare} from './release.mjs';
 import {zip} from './archive.mjs';
+import {extensionIdentities,hasUnpackedExtension} from './extension-identity.mjs';
 
 export async function installation(root,{allowMissingVersion=false}={}) {
   root=await plainDirectory(root);
@@ -30,7 +31,7 @@ async function repairEntryPoints(payload,existing){
   const expectedLauncher=await hashFile(path.join(payload,'tabora.exe'));let actualLauncher;
   try{actualLauncher=await hashFile(path.join(existing.root,'tabora.exe'));}catch(error){if(error.code!=='ENOENT')throw error;}
   if(actualLauncher!==expectedLauncher)await copyFile(path.join(payload,'tabora.exe'),path.join(existing.root,'tabora.exe'));
-  if(existing.config.installKind==='store')return;
+  if(!await hasUnpackedExtension(existing.root,existing.config.installKind))return;
   const source=path.join(payload,'dist/extension'),target=path.join(existing.root,'extension-unpacked'),canonical=await json(path.join(source,'manifest.json'));
   let previous;try{previous=await json(path.join(target,'manifest.json'));}catch{throw new Error('extension_permissions_review_required');}
   if(previous.key!==canonical.key||previous.version!==canonical.version)throw new Error('extension_permissions_review_required');
@@ -60,6 +61,7 @@ export async function validatePayload(payload) {
   await plainDirectory(payload);
   const info=await json(path.join(payload,'dist/build-info.json')), descriptor=await json(path.join(payload,'package-info.json'),16_000_000);
   const id=versionId(info),extensionId=(await readFile(path.join(payload,'extension-id.txt'),'utf8')).trim();
+  await extensionIdentities(payload);
   if(descriptor.schema!==1||descriptor.platform!==process.platform||descriptor.arch!==process.arch||descriptor.versionId!==id||!/^[a-p]{32}$/.test(extensionId))throw new Error('payload_platform_mismatch');
   for(const file of ['tabora.exe','runtime/node.exe','dist/host/main.js','dist/host/mcp.js','dist/host/update-worker.js','dist/extension/manifest.json','scripts/cli.mjs','release-trust.json'])if(!(await lstat(confined(payload,file))).isFile())throw new Error('payload_incomplete');
   if(!descriptor.inventory||Object.keys(descriptor.inventory).length>50000)throw new Error('payload_inventory_invalid');
@@ -89,6 +91,7 @@ export async function install(payload,root,{stateDir,policy,migrateFrom,registra
   const validated=await validatePayload(payload),{id,extensionId}=validated;root=path.resolve(root);
   const selectedChannel=channel??validated.channel;if(!['stable','preview'].includes(selectedChannel))throw new Error('invalid_update_channel');
   if(extensionChannel!==undefined&&!['unpacked','store'].includes(extensionChannel))throw new Error('invalid_extension_channel');
+  if(extensionChannel==='store'&&!(await extensionIdentities(payload)).store)throw new Error('store_identity_unavailable');
   if(policy!==undefined&&!['off','notify','idle-auto'].includes(policy))throw new Error('invalid_update_policy');
   const requestedInstallRoot=root;
   await mkdir(root,{recursive:true});
@@ -147,7 +150,7 @@ export async function doctor(root,requireProfile=false) {
     child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
     const tools=await request('tools/list',{});if(!tools.tools.some(tool=>tool.name==='browser_update_status'))throw new Error('mcp_contract_incomplete');
     const response=await request('tools/call',{name:'browser_profiles',arguments:{}});if(response.isError)throw new Error('mcp_health_failed');
-    const profiles=JSON.parse(response.content[0].text);if(requireProfile&&!profiles.length)throw new Error('profile_connection_required');
+    const allProfiles=JSON.parse(response.content[0].text),profiles=allProfiles.filter(profile=>(profile.extensionChannel??'unpacked')===installed.config.installKind);if(requireProfile&&!profiles.length)throw new Error('profile_connection_required');
     if(requireProfile){
       const created=await request('tools/call',{name:'browser_session_create',arguments:{profileId:profiles[0].id,name:'Installation health check'}});if(created.isError)throw new Error('profile_health_failed');
       const session=JSON.parse(created.content[0].text);
@@ -155,9 +158,10 @@ export async function doctor(root,requireProfile=false) {
         const result=await request('tools/call',{name:'browser_capabilities',arguments:{sessionId:session.id}});if(result.isError)throw new Error('profile_health_failed');
         const capabilities=JSON.parse(result.content[0].text);
         if(capabilities.build?.host?.fingerprint!==validated.info.fingerprint)throw new Error('broker_restart_required');
-        if(capabilities.build.compatible!==true||installed.config.installKind==='unpacked'&&capabilities.build.extension?.fingerprint!==validated.info.fingerprint)throw new Error('extension_update_required');
+        if(capabilities.build.compatible!==true||profiles[0].extensionChannel!=='store'&&capabilities.build.extension?.fingerprint!==validated.info.fingerprint)throw new Error('extension_update_required');
       }finally{await request('tools/call',{name:'browser_session_release',arguments:{sessionId:session.id,closeCreatedTabs:false}});}
     }
-    return {installed:true,mcp:true,profileConnected:profiles.length>0,runtimeVerified:requireProfile,profileCount:profiles.length,version:installed.config.current,extensionChannel:installed.config.installKind,extensionDirectory:installed.config.installKind==='unpacked'?path.join(root,'extension-unpacked'):undefined};
+    const identities=await extensionIdentities(installed.version);
+    return {installed:true,mcp:true,profileConnected:profiles.length>0,runtimeVerified:requireProfile,profileCount:profiles.length,version:installed.config.current,extensionId:identities[installed.config.installKind],extensionChannel:installed.config.installKind,extensionDirectory:installed.config.installKind==='unpacked'?path.join(root,'extension-unpacked'):undefined};
   } finally {clearTimeout(timer);child.stdin.end();child.kill();}
 }

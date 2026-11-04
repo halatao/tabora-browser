@@ -95,7 +95,8 @@ export const browserMode=z.enum(['safe','takeover','readonly']);
 export const profileSchema = z.object({id:idSchema,name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean(),
   mode:browserMode.optional(),vaultEnabled:z.boolean().optional(),activeProvider:z.enum(['agent',...PROVIDERS]).optional(),
   browserProfileKey:z.string().max(160).optional(),nameSource:z.enum(['automatic','selected','legacy']).optional(),
-  managedProfile:z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/).optional(),nativeLifecycleVersion:z.literal(1).optional()
+  managedProfile:z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/).optional(),nativeLifecycleVersion:z.literal(1).optional(),
+  extensionChannel:z.enum(['unpacked','store']).optional()
 }).strict();
 export type BrowserProfile = z.infer<typeof profileSchema>;
 export const secretScopeSchema = z.discriminatedUnion('type',[

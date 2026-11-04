@@ -19,6 +19,7 @@ import {UpdateChecker} from './updates.js';
 import {buildInfo} from '../build-info.js';
 import {InstallationUpdates,MaintenanceGate,updateId} from './installation-updates.js';
 import {toolDefinitions} from '../browser-api.js';
+import {compatibleExtension} from '../../scripts/distribution/extension-identity.mjs';
 const installationUpdates=new InstallationUpdates(),maintenance=new MaintenanceGate();
 await mkdir(stateDir,{recursive:true,mode:0o700});
 const token=randomBytes(32).toString('hex'),osProtector=protector();
@@ -38,7 +39,7 @@ const server=createServer(socket=>{
   peer.handler=async(command,payload)=>{
     await ready;
     if(!role){
-      if(command==='ready')return {ready:true,profileMetadataVersion:1,updateLifecycleVersion:1};
+      if(command==='ready')return {ready:true,profileMetadataVersion:1,updateLifecycleVersion:1,extensionIdentityVersion:1};
       if(command!=='authenticate')throw new PilotError('authentication_required');
       const p=z.object({role:z.enum(['extension','mcp']),token:z.string().regex(/^[a-f0-9]{64}$/),fileRoots:z.array(z.string().max(4000)).max(16).default([]),fingerprint:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict().parse(payload);
       if(!timingSafeEqual(Buffer.from(p.token),Buffer.from(token)))throw new PilotError('authentication_failed');
@@ -84,8 +85,7 @@ const server=createServer(socket=>{
         const status=await installationUpdates.status(input.updateId);
         if(status.status==='mcp_restart_required'&&clientFingerprint===buildInfo.fingerprint){
           const profiles=await router.maintenance('update.status'),expected=(status as any).profiles??[];
-          const local=await installationUpdates.check();
-          const compatible=(profile:any)=>profile.contractVersion===buildInfo.contractVersion&&(local.installKind==='store'&&!profile.managedProfile||profile.fingerprint===buildInfo.fingerprint);
+          const compatible=(profile:any)=>compatibleExtension(profile,buildInfo);
           const ready=expected.length?expected.every((id:string)=>profiles.some(profile=>profile.id===id&&compatible(profile))):profiles.some(compatible);
           return {...status,status:ready?'completed':'profile_connection_required',components:{host:'verified',extension:ready?'verified':'awaiting_profile',mcp:'verified'}};
         }
@@ -104,7 +104,7 @@ const server=createServer(socket=>{
     if(command==='profile.update'){
       if(payload?.id&&payload.id!==profile.id)throw new PilotError('profile_scope_mismatch');
       if(['mode','vaultEnabled','activeProvider','mcpEnabled'].some(key=>payload?.[key]!==undefined&&payload[key]!== (profile as any)[key]))service.invalidateProfileDecisions(profile.id);
-      profile=profileSchema.parse({...profile,...payload,id:profile.id,managedProfile:profile.managedProfile,nativeLifecycleVersion:profile.nativeLifecycleVersion});router.update(profile);return profile;
+      profile=profileSchema.parse({...profile,...payload,id:profile.id,managedProfile:profile.managedProfile,nativeLifecycleVersion:profile.nativeLifecycleVersion,extensionChannel:profile.extensionChannel});router.update(profile);return profile;
     }
     if(command!=='host')throw new PilotError('unknown_command');
     const p=z.object({sessionId:z.string().min(1).max(100),command:z.string().max(40),payload:z.unknown().optional()}).strict().parse(payload);

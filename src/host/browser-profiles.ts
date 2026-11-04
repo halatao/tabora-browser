@@ -11,13 +11,13 @@ export function chooseBrowserProfile(candidates:ProfileCandidate[],key?:string){
 async function metadata(file:string){
   try{if((await stat(file)).size>10*1024*1024)return undefined;return JSON.parse(await readFile(file,'utf8'));}catch{return undefined;}
 }
-export async function detectBrowserProfiles(input:unknown){
+export async function detectBrowserProfiles(input:unknown,nativeExtensionId?:string){
   const p=z.object({browser:z.enum(['chrome','edge']),key:z.string().max(160).optional()}).strict().parse(input);
   const managed=z.string().trim().min(1).max(80).safeParse(process.env.TABORA_BROWSER_NAME);
   if(managed.success){const candidate={key:'managed:'+managed.data,name:managed.data,installed:true};return {candidates:[candidate],automatic:candidate};}
   const root=path.join(process.env.LOCALAPPDATA??'',p.browser==='edge'?'Microsoft/Edge/User Data':'Google/Chrome/User Data');
   const state=await metadata(path.join(root,'Local State'));
-  const extensionId=(await readFile(path.join(import.meta.dirname,'../../extension-id.txt'),'utf8')).trim();
+  const extensionId=nativeExtensionId??(await readFile(path.join(import.meta.dirname,'../../extension-id.txt'),'utf8')).trim();
   const candidates:ProfileCandidate[]=[];
   for(const [directory,raw] of Object.entries(state?.profile?.info_cache??{}).slice(0,40)){
     if(!/^(Default|Profile \d+)$/.test(directory))continue;

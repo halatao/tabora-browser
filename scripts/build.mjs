@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import {extensionIdentities,publicKeyId} from './distribution/extension-identity.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 process.chdir(root);
 const version=JSON.parse(await readFile('package.json','utf8')).version;
@@ -15,7 +16,7 @@ async function fingerprint(directory){
 }
 await fingerprint('src');
 await fingerprint('scripts/distribution');
-for(const file of ['package.json','package-lock.json','scripts/build.mjs','scripts/cli.mjs','scripts/state-directory.mjs','scripts/setup-lib.mjs','scripts/browser.mjs','release-trust.json','extension-key.txt','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
+for(const file of ['package.json','package-lock.json','scripts/build.mjs','scripts/cli.mjs','scripts/state-directory.mjs','scripts/setup-lib.mjs','scripts/browser.mjs','release-trust.json','extension-key.txt','extension-identities.json','docs/publishing/chrome-store-public-key.pem','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
 const buildInfo={version,fingerprint:hash.digest('hex'),contractVersion:2};
 const define={__TABORA_BUILD__:JSON.stringify(buildInfo)};
 await mkdir('dist/extension', { recursive: true });
@@ -28,6 +29,8 @@ catch (e) {
 }
 const extensionId = [...createHash('sha256').update(Buffer.from(key, 'base64')).digest().subarray(0, 16)].map(b=>String.fromCharCode(97+(b>>4),97+(b&15))).join('');
 await writeFile('extension-id.txt', extensionId + '\n');
+const identities=await extensionIdentities(root);
+if(identities.unpacked!==extensionId||publicKeyId(await readFile('docs/publishing/chrome-store-public-key.pem','utf8'))!==identities.store)throw new Error('extension_public_key_mismatch');
 await writeFile('dist/extension/manifest.json', JSON.stringify({
   manifest_version: 3, name: 'Tabora Browser', version: JSON.parse(await readFile('package.json','utf8')).version, key,
   description: 'Local browser control for AI agents, with MCP and an optional encrypted vault.',

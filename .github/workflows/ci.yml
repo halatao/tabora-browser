@@ -25,3 +25,10 @@ jobs:
       - run: npm run test:mcp-legacy
       - run: npm run test:browser
       - run: npm run test:sdk
+      - name: Export Store screenshots from the isolated fixture
+        run: node scripts/store-assets.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-store-assets
+          path: reports/store-assets/
+          if-no-files-found: error

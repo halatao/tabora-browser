@@ -2,6 +2,8 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {installation,install,register,removeRegistration,doctor,validateUninstall} from './distribution/installation.mjs';
+import {switchExtensionChannel,recoverExtensionChannel} from './distribution/extension-channel.mjs';
+import {extensionIdentities} from './distribution/extension-identity.mjs';
 
 const payload=path.resolve(import.meta.dirname,'..'),args=process.argv.slice(2);
 let command=args.shift()??'help';
@@ -17,6 +19,7 @@ if(!['native','mcp','browser','worker'].includes(command))while(args.length) {
   else if(command==='update'&&!options.operation)options.operation=name;
   else if(command==='update'&&!options.updateId)options.updateId=name;
   else if(command==='update'&&!options.ticket)options.ticket=name;
+  else if(command==='extension-channel'&&!options.extensionChannel)options.extensionChannel=name;
   else throw new Error('unknown_cli_argument');
 }
 try {
@@ -29,15 +32,18 @@ try {
   }
   else if(command==='install') {
     const result=await install(payload,options.root??path.join(process.env.LOCALAPPDATA,'Programs/TaboraBrowser'),options);
-    console.log(JSON.stringify({installed:!result.status,status:result.status,updateId:result.updateId,root:result.root,extensionId:result.config.extensionId,extensionChannel:result.config.installKind,extensionDirectory:result.config.installKind==='unpacked'?path.join(result.root,'extension-unpacked'):undefined,nextStep:result.status?'Use update status to verify completion; reconnect MCP when requested.':result.config.installKind==='store'?'Install the matching published Store extension, complete browser consent and reconnect MCP.':'Load unpacked once in the intended Chrome profile; reconnect your MCP client.'}));
-  } else if(['doctor','repair','uninstall','uninstall-check','update','mcp-config'].includes(command)) {
+    const identities=await extensionIdentities(result.version);
+    console.log(JSON.stringify({installed:!result.status,status:result.status,updateId:result.updateId,root:result.root,extensionId:identities[result.config.installKind],extensionChannel:result.config.installKind,extensionDirectory:result.config.installKind==='unpacked'?path.join(result.root,'extension-unpacked'):undefined,nextStep:result.status?'Use update status to verify completion; reconnect MCP when requested.':result.config.installKind==='store'?'Install the matching published Store extension, complete browser consent and reconnect MCP.':'Load unpacked once in the intended Chrome profile; reconnect your MCP client.'}));
+  } else if(['doctor','repair','uninstall','uninstall-check','update','mcp-config','extension-channel'].includes(command)) {
     const root=options.root??process.env.TABORA_INSTALL_ROOT;if(!root)throw new Error('installed_root_required');
     const installed=await installation(root);process.env.TABORA_INSTALL_ROOT=installed.root;process.env.TABORA_STATE_DIR=installed.config.stateDir;
     if(command==='doctor')console.log(JSON.stringify(await doctor(root,options.requireProfile)));
     if(command==='mcp-config')console.log(JSON.stringify({mcpServers:{'tabora-browser':{command:path.join(installed.root,'tabora.exe'),args:['mcp']}}},null,2));
+    if(command==='extension-channel')console.log(JSON.stringify(await switchExtensionChannel(root,options.extensionChannel)));
     if(command==='repair'){
       const {updateCli}=await import(pathToFileURL(path.join(payload,'dist/host/update-worker.js')).href);
-      const recovery=await updateCli('recover');if(recovery.status==='waiting_for_idle')console.log(JSON.stringify(recovery));else register(root);
+      if(await recoverExtensionChannel(root))console.log(JSON.stringify({recovered:true,kind:'extension-channel'}));
+      else{const recovery=await updateCli('recover');if(recovery.status==='waiting_for_idle')console.log(JSON.stringify(recovery));else register(root);}
     }
     if(command==='uninstall')console.log(JSON.stringify(await removeRegistration(root)));
     if(command==='uninstall-check')console.log(JSON.stringify(await validateUninstall(root)));
@@ -45,6 +51,6 @@ try {
       const {updateCli}=await import(pathToFileURL(path.join(payload,'dist/host/update-worker.js')).href);console.log(JSON.stringify(await updateCli(options.operation??'check',options.updateId,options.ticket)));
     }
   } else if(command==='version') {console.log(await (await import('node:fs/promises')).readFile(path.join(payload,'dist/build-info.json'),'utf8'))}
-  else if(command==='help')console.log('Tabora: install [--root PATH] [--state-dir PATH] [--auto-update|--notify-only|--no-updates] [--channel stable|preview] [--extension-channel unpacked|store] [--migrate-from CHECKOUT] | mcp | mcp-config | doctor [--require-profile] | repair | uninstall | browser install|start|stop|status ... | update check|prepare|apply|status|recover [UPDATE_ID] [TICKET]');
+  else if(command==='help')console.log('Tabora: install [--root PATH] [--state-dir PATH] [--auto-update|--notify-only|--no-updates] [--channel stable|preview] [--extension-channel unpacked|store] [--migrate-from CHECKOUT] | extension-channel store|unpacked [--root PATH] | mcp | mcp-config | doctor [--require-profile] | repair | uninstall | browser install|start|stop|status ... | update check|prepare|apply|status|recover [UPDATE_ID] [TICKET]');
   else throw new Error('unknown_cli_command');
 } catch(error) {console.error(/^\w+(?::[^\r\n]*)?$/.test(error.message)?error.message:'tabora_command_failed');process.exitCode=1;}

@@ -12,7 +12,7 @@ const packetSchema=z.discriminatedUnion('type',[
 // builds reject new envelope keys and would disconnect/release their sessions.
 const errorDataSchema=z.object({details:actionDiagnosticSchema}).strict();
 export class Peer {
-  capabilities?:{profileMetadataVersion?:number;updateLifecycleVersion?:number};
+  capabilities?:{profileMetadataVersion?:number;updateLifecycleVersion?:number;extensionIdentityVersion?:number};
   handler:(command:string,payload:any)=>Promise<unknown>=async()=>{throw new PilotError('not_ready');};
   onclose:()=>void=()=>{};
   private pending=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:NodeJS.Timeout}>();

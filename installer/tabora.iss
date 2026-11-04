@@ -22,6 +22,7 @@ UninstallDisplayIcon={app}\tabora.exe
 Source: "{#Payload}\*"; DestDir: "{tmp}\TaboraPayload"; Flags: recursesubdirs createallsubdirs deleteafterinstall
 [Tasks]
 Name: autoupdate; Description: "Automatically install verified updates between tasks"
+Name: storeextension; Description: "Use the Chrome Web Store extension (requires a published Store item)"; Flags: unchecked; Check: NewTaboraInstallation
 [UninstallRun]
 Filename: "{app}\tabora.exe"; Parameters: "uninstall"; Flags: runhidden waituntilterminated
 [UninstallDelete]
@@ -31,6 +32,11 @@ Type: files; Name: "{app}\tabora.exe"
 Type: files; Name: "{app}\native-host.json"
 Type: files; Name: "{app}\installation.json"
 [Code]
+function NewTaboraInstallation(): Boolean;
+begin
+  Result := not FileExists(ExpandConstant('{app}\installation.json'));
+end;
+
 function InitializeUninstall(): Boolean;
 var ResultCode: Integer;
 begin
@@ -45,6 +51,7 @@ begin
     Parameters := 'install --root "' + ExpandConstant('{app}') + '"';
     if WizardIsTaskSelected('autoupdate') then Parameters := Parameters + ' --auto-update'
     else Parameters := Parameters + ' --notify-only';
+    if NewTaboraInstallation() and WizardIsTaskSelected('storeextension') then Parameters := Parameters + ' --extension-channel store';
     if not Exec(ExpandConstant('{tmp}\TaboraPayload\tabora.exe'), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       RaiseException('Could not launch Tabora installation.');
     if ResultCode <> 0 then RaiseException('Tabora registration needs attention. Run the packaged CLI repair after resolving any existing registration conflict.');

@@ -12,7 +12,7 @@
 | Homepage | https://github.com/halatao/tabora-browser |
 | Support | https://github.com/halatao/tabora-browser/issues |
 | Source license | MIT; third-party components retain their own licenses |
-| Latest prepared source version | 0.6.2 |
+| Latest prepared source version | 0.6.3 |
 | Existing unpacked extension ID | `kenmodennegnggpghfmlpbbdfomadfdc` |
 | Store item ID / public key | Draft item `ghkhjhmanloapainmhnnpkbopllcfomg` created on 4 November 2026; [public key](chrome-store-public-key.pem) exported from its dashboard and checked to derive that same ID |
 | Privacy policy | [Published policy](https://github.com/halatao/tabora-browser/blob/main/docs/privacy.md) |
@@ -75,11 +75,11 @@ Explain that agent/MCP outputs and selected model requests can leave the device.
 
 ## Identity and remaining assets
 
-The draft Store ID is `ghkhjhmanloapainmhnnpkbopllcfomg`, different from the unpacked ID `kenmodennegnggpghfmlpbbdfomadfdc`. Do not submit a live item until its native-host identity and installation path have been verified. Existing installations refuse a different extension ID; their migration is a separate implementation gate. Keep the current unpacked identity working during that migration.
+The draft Store ID is `ghkhjhmanloapainmhnnpkbopllcfomg`, different from the unpacked ID `kenmodennegnggpghfmlpbbdfomadfdc`. Host 0.6.3 supports explicit, reversible channel migration and exact native origins; see [the migration procedure](../distribution.md#chrome-web-store-channel). Keep the current unpacked identity working during that migration. Do not submit a live item until the actual Store build and installation path have passed publisher acceptance.
 
-The dashboard rejected the original 0.6.2 extension ZIP because `manifest.key` is not allowed in a Store upload. A separate draft-upload ZIP was derived from the verified signed release by removing only that manifest field; every other file was checked unchanged. The released ZIP and installed extension were not modified. The packaging workflow still needs a reproducible Store variant rather than this local preparation step.
+The dashboard rejected the original 0.6.2 extension ZIP because `manifest.key` is not allowed in a Store upload. A separate draft-upload ZIP was derived from the verified signed release by removing only that manifest field; every other file was checked unchanged. The released ZIP and installed extension were not modified. Starting with 0.6.3, packaging produces the Store variant automatically, checksummed and covered by the release signature.
 
-The draft contains the prepared description, homepage and support URLs. It has not been submitted for review. Remaining listing work includes category/language, icon, screenshots, privacy disclosures, reviewer instructions and contact-email verification. The dashboard specifies a 128 × 128 store icon and at least one 1280 × 800 or 640 × 400 screenshot, JPEG or 24-bit PNG without alpha.
+The draft contains the prepared description, homepage and support URLs. Purpose/permission explanations and the privacy URL are prepared in the privacy form. It has not been submitted for review. Remaining listing work includes category/language, icon, screenshots, final privacy disclosures/attestations, reviewer instructions and contact-email verification. The dashboard specifies a 128 × 128 store icon and at least one 1280 × 800 or 640 × 400 screenshot, JPEG or 24-bit PNG without alpha. CI generates these assets from the actual bundled panel in a synthetic profile and publishes a provenance record with them.
 
 Use the extension icon and screenshots from an isolated test account/CI fixture. Do not reuse screenshots of an ordinary logged-in user profile. Required dimensions, crop and Store form fields must be checked against the current dashboard before upload. Screenshots and any promotional image remain to be attached.
 

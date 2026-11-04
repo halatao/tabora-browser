@@ -34,7 +34,7 @@ export async function connectBroker(role:'extension'|'mcp'):Promise<Peer>{
   if(!peer)throw new PilotError('broker_unavailable');
   try{
     const ready=await peer.call('ready',undefined,15000);
-    peer.capabilities={profileMetadataVersion:ready?.profileMetadataVersion===1?1:undefined,updateLifecycleVersion:ready?.updateLifecycleVersion===1?1:undefined};
+    peer.capabilities={profileMetadataVersion:ready?.profileMetadataVersion===1?1:undefined,updateLifecycleVersion:ready?.updateLifecycleVersion===1?1:undefined,extensionIdentityVersion:ready?.extensionIdentityVersion===1?1:undefined};
     // DPAPI binds the local routing credential to the Windows user; no TCP listener.
     const wrapped=await readFile(path.join(stateDir,'broker-auth.bin'));
     const bytes=await protector().unprotect(wrapped);

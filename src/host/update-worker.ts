@@ -13,6 +13,7 @@ import {cleanupInstallation} from '../../scripts/distribution/cleanup.mjs';
 import {InstallationUpdates,updateId} from './installation-updates.js';
 import {connectBroker} from './broker-client.js';
 import {PilotError,safeCode} from '../shared.js';
+import {compatibleExtension,hasUnpackedExtension} from '../../scripts/distribution/extension-identity.mjs';
 
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 type ManagedProfile={id:string;name:string;headless:boolean};
@@ -52,13 +53,11 @@ async function recover(){
   try{
     const preparation=await peer.call('maintenance.prepare',{updateId:id});if(!preparation.ready)return {status:'waiting_for_idle',updateId:id};
     const backup=path.join(root,'extension-previous-'+id),extension=path.join(root,'extension-unpacked');
-    if(installed.config.installKind==='unpacked'){
-      try{
-        await plainDirectory(backup);
-        try{await rename(extension,path.join(root,'extension-recovery-'+crypto.randomUUID()));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-        await rename(backup,extension);
-      }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-    }
+    try{
+      await plainDirectory(backup);
+      try{await rename(extension,path.join(root,'extension-recovery-'+crypto.randomUUID()));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+      await rename(backup,extension);
+    }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
     await atomicJson(path.join(root,'installation.json'),record.previousConfig);
     await peer.call('maintenance.finish',{updateId:id}).catch(error=>{if(safeCode(error)!=='connection_lost')throw error;});
     for(const profile of record.managedProfiles??[])await managedCommand(path.join(root,'versions',record.previousConfig.current),profile.name,'start',profile.headless);
@@ -79,6 +78,7 @@ async function apply(id:string){
   const previous=path.join(root,'extension-previous-'+id),extension=path.join(root,'extension-unpacked');
   const progress=async(status:string,extra={})=>{Object.assign(record,extra,{status,updatedAt:Date.now()});return atomicJson(file,record);};
   try {
+    if(JSON.stringify((await installation(root)).config)!==JSON.stringify(installed.config))throw new Error('installation_changed_retry');
     await progress('scheduled',{previousConfig:installed.config});
     const currentBuild=await json(path.join(installed.version,'dist/build-info.json'));
     if(installed.config.policy==='off'&&record.source!=='local-installer')throw new Error('update_checks_disabled');
@@ -112,7 +112,7 @@ async function apply(id:string){
     let exists=false;try{await lstat(version);exists=true;}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
     if(exists){if(await hashFile(path.join(version,'package-info.json'))!==await hashFile(path.join(payload,'package-info.json')))throw new Error('version_directory_conflict');await validatePayload(version);}
     else{await cp(payload,staging,{recursive:true,errorOnExist:true,force:false});await rename(staging,version);}
-    if(installed.config.installKind==='unpacked') {
+    if(await hasUnpackedExtension(root,installed.config.installKind)) {
       const next=path.join(root,'extension-staging-'+id);await cp(path.join(version,'dist/extension'),next,{recursive:true,errorOnExist:true,force:false});
       await rename(extension,previous);oldMoved=true;await progress('applying',{checkpoint:'extension_old_moved'});
       await rename(next,extension);newMoved=true;await progress('applying',{checkpoint:'extension_replaced'});
@@ -133,7 +133,7 @@ async function apply(id:string){
     for(;;){
       const health=await peer.call('maintenance.health',{});
       const profiles=preparation.profiles as string[];
-      if(health.build.fingerprint===validated.info.fingerprint&&profiles.every(id=>health.profiles.some((profile:any)=>profile.id===id&&profile.contractVersion===validated.info.contractVersion&&(installed.config.installKind==='store'&&!profile.managedProfile||profile.fingerprint===validated.info.fingerprint)))){extensionVerified=profiles.length>0;break;}
+      if(health.build.fingerprint===validated.info.fingerprint&&profiles.every(id=>health.profiles.some((profile:any)=>profile.id===id&&compatibleExtension(profile,validated.info)))){extensionVerified=profiles.length>0;break;}
       if(Date.now()>deadline){if(health.build.fingerprint!==validated.info.fingerprint)throw new Error('update_health_failed');break;}await sleep(1000);
     }
     await progress('mcp_restart_required',{checkpoint:'host_verified',hostVersion:validated.info.version,extensionVerified,nextStep:extensionVerified?'Reconnect MCP clients to load the new server code. Browser actions were not replayed.':'Host and extension files installed. Connect the browser profile, complete browser consent if requested, and reconnect MCP. No browser action was replayed.'});

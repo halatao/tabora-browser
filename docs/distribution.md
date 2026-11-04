@@ -124,6 +124,28 @@ The publisher requires passing browser CI for the exact release tag, then upload
 
 ## Build and verify
 
+### Chrome Web Store channel
+
+The registered Store identity is `ghkhjhmanloapainmhnnpkbopllcfomg`; the unpacked identity remains `kenmodennegnggpghfmlpbbdfomadfdc`. The Store item is still a draft. Do not direct end users to install it until it is published.
+
+For a new installation, `tabora.exe install --extension-channel store` registers the exact Store origin and the retained unpacked origin. The optional Store task in the EXE installer is available only for a new installation. Existing installations retain their selected channel during upgrades.
+
+To migrate an existing installation, first upgrade the host to 0.6.3 or later. Finish active tasks, temporarily disable connected Tabora extensions and close their MCP clients. Ordinary browser tabs may remain open. Run:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\TaboraBrowser\tabora.exe" extension-channel store
+```
+
+Install the published Store item using Chrome's normal consent flow, reconnect MCP and run `tabora.exe doctor --require-profile`. The doctor requires a connected profile from the selected channel, so an old unpacked profile cannot falsely verify a Store installation. `extension-channel unpacked` reverses the choice. The switch takes the updater lock, refuses busy installations and restores the previous configuration on a registration failure; use `tabora.exe repair` after an interrupted switch.
+
+The canonical `installation.json.extensionId` remains the unpacked payload identity for compatibility with existing signed update manifests. `installKind` chooses the primary channel; CLI/doctor results report its actual extension ID. The native host accepts only the catalog's exact origins, with Store access enabled explicitly by the Store channel. Provenance comes from Chrome's native origin argument rather than the extension's own profile claims. Store profiles require compatible contracts; unpacked and managed profiles still require the matching build fingerprint.
+
+The host data directory, encrypted vault, stable MCP command and existing unpacked directory are retained. Retained unpacked files continue to receive host-package updates. Chrome manages Store extension files itself. A Store installation starts a new extension-storage profile in Safe mode, with the vault off; browser preferences, sessions, site permissions and per-profile vault grants are not copied across identities. Shared vault entries stay in the host, and old profile-scoped entries remain intact under their original profile. Do not rewrite browser profile files or silently broaden credential scopes to transfer them.
+
+`npm run package` produces `tabora-VERSION-chrome-store.zip` alongside the existing unpacked ZIP. Only `manifest.key` is omitted. Both ZIPs are checksummed and included in the signed release manifest using the existing `extension` artifact kind so 0.6.2 updaters can still read the manifest. Build validates both public keys against `extension-identities.json`. CI exports the actual panel's Store screenshots and 128-pixel icon as the `chrome-store-assets` artifact using an isolated synthetic profile; the exporter refuses a packaged or foreign registered host.
+
+### Package checks
+
 ```powershell
 npm ci
 npm run check

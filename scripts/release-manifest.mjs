@@ -9,7 +9,7 @@ const channel=process.env.TABORA_RELEASE_CHANNEL??'stable';if(!['stable','previe
 const releaseId=(channel==='preview'?'preview-v':'v')+pkg.version;
 const key=createPrivateKey(process.env.TABORA_RELEASE_PRIVATE_KEY??'');if(key.asymmetricKeyType!=='ed25519')throw new Error('An Ed25519 release signing key is required.');
 const artifacts=[];
-for(const [suffix,kind] of [['windows-x64.zip','payload'],['extension.zip','extension'],['windows-x64-setup.exe','installer']]){
+for(const [suffix,kind] of [['windows-x64.zip','payload'],['extension.zip','extension'],['chrome-store.zip','extension'],['windows-x64-setup.exe','installer']]){
   const name=`tabora-${pkg.version}-${suffix}`,file=path.join(directory,name);let info;
   try{info=await lstat(file);}catch(error){if(error.code==='ENOENT'&&kind==='installer'&&channel==='preview')continue;throw error;}
   artifacts.push({name,kind,size:info.size,sha256:await hashFile(file),url:`${repository}/releases/download/${releaseId}/${name}`});

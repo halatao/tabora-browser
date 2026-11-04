@@ -77,7 +77,7 @@ export class BrokerRouter {
   register(connection:Connection){if(this.connections.has(connection.profile.id))throw new PilotError('profile_already_connected');const call=connection.call;connection.maintenanceCall=call;connection.call=(command,payload)=>this.execute(command,()=>{if(this.connections.get(connection.profile.id)!==connection)throw new PilotError('profile_disconnected');if(!connection.profile.mcpEnabled&&!['session.release','configuration.changed'].includes(command))throw new PilotError('mcp_access_disabled');return call(command,payload);});this.connections.set(connection.profile.id,connection);}
   async maintenance(command:'update.prepare'|'update.seal'|'update.resume'|'update.activate'|'update.status',updateId?:string){
     return Promise.all([...this.connections.values()].map(async connection=>{
-      const identity={id:connection.profile.id,managedProfile:connection.profile.managedProfile,nativeLifecycleVersion:connection.profile.nativeLifecycleVersion};
+      const identity={id:connection.profile.id,managedProfile:connection.profile.managedProfile,nativeLifecycleVersion:connection.profile.nativeLifecycleVersion,extensionChannel:connection.profile.extensionChannel};
       try{return {...await connection.maintenanceCall!(command,{updateId}),...identity};}
       catch(error){return {...identity,ready:false,code:safeCode(error)};}
     }));

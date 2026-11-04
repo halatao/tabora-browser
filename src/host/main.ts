@@ -1,13 +1,17 @@
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { PROTOCOL_VERSION, PilotError, safeCode, safeErrorDetails, actionDiagnosticSchema, idSchema, profileSchema } from '../shared.js';
 import { NativeDecoder, encodeMessage } from './codec.js';
 import { connectBroker } from './broker-client.js';
 import { detectBrowserProfiles } from './browser-profiles.js';
-const id=(await readFile(path.join(import.meta.dirname,'../../extension-id.txt'),'utf8')).trim();
-if(process.argv[2]!==`chrome-extension://${id}/`){process.stderr.write('Unrecognized extension origin.\n');process.exit(1);}
+import {extensionIdentities,nativeExtensionChannel} from '../../scripts/distribution/extension-identity.mjs';
+import {installation} from '../../scripts/distribution/installation.mjs';
+const identities=await extensionIdentities(path.join(import.meta.dirname,'../..'));
+const installed=process.env.TABORA_INSTALL_ROOT?await installation(process.env.TABORA_INSTALL_ROOT):undefined;
+let extensionChannel:'unpacked'|'store';
+try{extensionChannel=nativeExtensionChannel(process.argv[2],identities,installed?.config.installKind??'unpacked');}
+catch{process.stderr.write('Unrecognized extension origin.\n');process.exit(1);}
 const peer=await connectBroker('extension');let registered=false;
 const pending=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:NodeJS.Timeout}>();
 function send(message:unknown){try{process.stdout.write(encodeMessage(message));}catch{peer.close();process.exit(1);}}
@@ -35,12 +39,14 @@ process.stdin.on('data',data=>{
     if(seen.has(m.id)){send({id:m.id,ok:false,code:'duplicate_request'});continue;}seen.add(m.id);if(seen.size>2000)seen.delete(seen.values().next().value!);
     const operation=async()=>{
       if(m.command==='hello'){
-        if(registered)throw new PilotError('already_registered');const {managedProfile,nativeLifecycleVersion,...declared}=profileSchema.parse(m.payload);
+        if(registered)throw new PilotError('already_registered');const {managedProfile,nativeLifecycleVersion,extensionChannel:claimedChannel,...declared}=profileSchema.parse(m.payload);
         const metadata=peer.capabilities?.profileMetadataVersion===1?{managedProfile:process.env.TABORA_MANAGED_PROFILE||undefined,nativeLifecycleVersion:1}:{};
-        const p=await peer.call('profile.register',profileSchema.parse({...declared,...metadata}));registered=true;return p;
+        if(extensionChannel==='store'&&peer.capabilities?.extensionIdentityVersion!==1)throw new PilotError('broker_update_required');
+        const provenance=peer.capabilities?.extensionIdentityVersion===1?{extensionChannel}:{};
+        const p=await peer.call('profile.register',profileSchema.parse({...declared,...metadata,...provenance}));registered=true;return p;
       }
       if(!registered)throw new PilotError('profile_required');
-      if(m.command==='profile.detect')return detectBrowserProfiles(m.payload);
+      if(m.command==='profile.detect')return detectBrowserProfiles(m.payload,identities[extensionChannel]);
       if(m.command==='profile.update')return peer.call(m.command,m.payload);
       return peer.call('host',{command:m.command,payload:m.payload,sessionId:m.sessionId});
     };
