@@ -106,7 +106,15 @@ try {
   await panel.waitForFunction(()=>document.querySelector('#notice').textContent.includes('jiný origin'));
   assert.equal(fixture.url(),'https://fixture.test/');
   // Provider failures remain visible and are not credited as fast successful decisions.
+  // Startup can select a real SDK model. Force missing models in this isolated host
+  // so the failure/report test never calls a developer's account or waits on login.
+  for(const provider of ['codex-sdk','claude-sdk','openai-decisions','typesafe-jev']){
+    const configured=await panel.evaluate(provider=>chrome.runtime.sendMessage({command:'configure',payload:{provider,model:'',connection:provider==='codex-sdk'||provider==='claude-sdk'?'sdk':'environment',timeoutMs:1000}}),provider);
+    assert.equal(configured.ok,true);
+  }
+  await panel.locator('#pin').click();await panel.waitForFunction(()=>!document.querySelector('#pin').disabled);
   await panel.locator('#recipe').selectOption('login');await panel.locator('#goal').fill('Vyber přihlašovací formulář.');await panel.locator('#observe').click();
+  await panel.waitForFunction(()=>!document.querySelector('#observe').disabled);
   const status=await panel.evaluate(()=>chrome.runtime.sendMessage({command:'status'}));
   assert(!JSON.stringify(status.data.snapshot).includes('FAKE-browser-password'));
   await panel.locator('#settings-toggle').click();await panel.locator('#compare').evaluate(el=>el.open=true);await panel.locator('#benchmark').click();
@@ -171,7 +179,7 @@ try {
 }catch(error){
   console.error('Browser test failed before cleanup:',error);
   const panel=context?.pages().find(p=>p.url().startsWith('chrome-extension:'));
-  if(panel)console.log('Last panel notice:',await panel.locator('#notice').textContent(), 'Outcome:',await panel.locator('#outcome-text').textContent());
+  if(panel)console.log('Last panel notice:',await panel.locator('#notice').textContent(), 'Outcome:',await panel.locator('#outcome-text').textContent(), 'Benchmark:',await panel.locator('#benchmark-state').textContent(), 'Rows:',await panel.locator('.result').count());
   throw error;
 }finally {
   await context?.close();assert.equal(path.dirname(dir),base);await rm(dir,{recursive:true,force:true,maxRetries:5});
