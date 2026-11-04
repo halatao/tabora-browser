@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 // Real extension input/capture integration with a synthetic decision sink, no paid model.
 import {createServer} from 'node:http';
 import {mkdir,mkdtemp,cp,readFile,writeFile,rm} from 'node:fs/promises';

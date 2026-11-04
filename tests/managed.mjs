@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';

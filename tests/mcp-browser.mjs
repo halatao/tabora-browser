@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 import { chromium } from 'playwright';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';

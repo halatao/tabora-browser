@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 // Opt-in live pilot. All scored navigation/reading goes through Tabora MCP and its
 // local controller. Playwright is used only to launch the isolated test profile,
 // prepare the public benchmark login, and close test resources.

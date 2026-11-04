@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 import {spawn,execFileSync} from 'node:child_process';
 import {mkdir,mkdtemp,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';

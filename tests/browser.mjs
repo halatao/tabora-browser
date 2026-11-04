@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 import { chromium } from 'playwright';
 import { mkdir, mkdtemp, readFile, writeFile, cp, rm, copyFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';

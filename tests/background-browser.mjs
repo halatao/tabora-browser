@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 // Product execution goes through MCP + the real extension. Playwright only sets up and judges.
 import {createServer} from 'node:http';
 import {mkdir,mkdtemp,cp,readFile,writeFile,rm} from 'node:fs/promises';

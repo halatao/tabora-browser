@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 // Integration assertions drive typed MCP operations; this is not a model benchmark.
 import {spawn} from 'node:child_process';
 import {mkdir,mkdtemp,cp,readFile,writeFile} from 'node:fs/promises';

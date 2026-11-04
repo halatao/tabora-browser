@@ -1,3 +1,4 @@
+import './require-source-host.mjs';
 import {createServer} from 'node:http';
 import {mkdir,mkdtemp,cp,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
