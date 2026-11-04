@@ -31,10 +31,12 @@ export async function hashFile(file) {
   try{for await(const chunk of handle.createReadStream({autoClose:false}))hash.update(chunk);return hash.digest('hex');}finally{await handle.close();}
 }
 export async function download(url,destination,{maximum=65536,size,sha256,request=fetch}={}) {
+  const signal=AbortSignal.timeout(destination?15*60*1000:120000);
+  try {
   let current=new URL(url),response;
   for(let i=0;i<5;i++) {
     if(current.protocol!=='https:'||current.username||current.password||current.port||!['github.com','release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(current.hostname))throw new Error('update_download_origin');
-    response=await request(current,{redirect:'manual',signal:AbortSignal.timeout(120000),headers:{'User-Agent':'tabora-browser-updater'}});
+    response=await request(current,{redirect:'manual',signal,headers:{'User-Agent':'tabora-browser-updater'}});
     if(![301,302,303,307,308].includes(response.status))break;
     const location=response.headers.get('location');await response.body?.cancel();if(!location)throw new Error('update_download_redirect');current=new URL(location,current);response=undefined;
   }
@@ -45,4 +47,5 @@ export async function download(url,destination,{maximum=65536,size,sha256,reques
     if(size!==undefined&&length!==size||sha256&&hash.digest('hex')!==sha256)throw new Error('update_download_integrity');
     return destination??Buffer.concat(chunks);
   } finally {await handle?.close();}
+  }catch(error){if(signal.aborted||error?.name==='TimeoutError')throw new Error('update_download_timeout');throw error;}
 }

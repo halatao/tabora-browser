@@ -36,6 +36,19 @@ test('download rejects foreign redirects, oversized streaming bodies and wrong h
   await assert.rejects(download('https://github.com/asset',undefined,{sha256:'0'.repeat(64),request:async()=>new Response('1234')}),/integrity/);
   assert.equal((await download('https://github.com/asset',undefined,{request:async()=>new Response('ok')})).toString(),'ok');
 });
+
+test('large package downloads get a bounded longer deadline and share it across redirects',async t=>{
+  const deadlines:number[]=[],signal=new AbortController().signal;t.mock.method(AbortSignal,'timeout',(milliseconds:number)=>{deadlines.push(milliseconds);return signal;});
+  const base=path.resolve('.test-state');await mkdir(base,{recursive:true});const directory=await mkdtemp(path.join(base,'download-deadline-'));
+  try{
+    await download('https://github.com/manifest',undefined,{request:async()=>new Response('metadata')});
+    const seen:AbortSignal[]= [];let requests=0;
+    await download('https://github.com/payload.zip',path.join(directory,'payload.zip'),{maximum:400_000_000,size:7,request:async(_url,options)=>{seen.push(options!.signal!);return ++requests===1?new Response(null,{status:302,headers:{location:'https://release-assets.githubusercontent.com/payload'}}):new Response('payload');}});
+    assert(deadlines[0]!<=120000);assert(deadlines[1]!>=10*60*1000&&deadlines[1]!<=15*60*1000);assert.equal(seen[0],seen[1]);
+    assert.equal(await readFile(path.join(directory,'payload.zip'),'utf8'),'payload');
+    await assert.rejects(download('https://github.com/slow',undefined,{request:async()=>{throw new DOMException('deadline','TimeoutError');}}),/update_download_timeout/);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
 test('maintenance closes admission atomically, drains existing work and binds resume to its owner',async()=>{
   const gate=new MaintenanceGate();let finish!:()=>void;
   const work=gate.run(()=>new Promise<void>(resolve=>{finish=resolve;}));const id='10000000-0000-4000-8000-000000000001';
