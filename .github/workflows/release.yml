@@ -102,7 +102,27 @@ jobs:
     environment: release
     permissions:
       contents: write
+      actions: read
     steps:
+      - name: Require passing browser CI for this release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          deadline=$((SECONDS + 900))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            result=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" --limit 10 --json status,conclusion --jq '.[0] | [.status // "missing", .conclusion // ""] | @tsv')
+            status=$(printf '%s' "$result" | cut -f1)
+            conclusion=$(printf '%s' "$result" | cut -f2)
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then exit 0; fi
+              echo "Browser CI did not pass for this release tag: $conclusion"
+              exit 1
+            fi
+            sleep 15
+          done
+          echo 'Browser CI did not complete before the release deadline.'
+          exit 1
       - uses: actions/download-artifact@v4
         with:
           name: tabora-windows-x64

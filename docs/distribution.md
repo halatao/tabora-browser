@@ -120,7 +120,7 @@ The workflow supplies a monotonic run sequence. Metadata has a 90-day validity p
 
 Artifacts: standalone ZIP, extension ZIP, SBOM inventory, checksums, exact-byte `release-manifest.json` and detached Ed25519 signature. Stable also includes the signed installer; ZIP-only previews omit it. Initial trust comes from the distribution chosen by the user; checksums alone are not publisher authentication. Release data from `main/package.json` remains advisory only.
 
-The publisher first uploads a draft, downloads every asset back and compares bytes, then publishes the complete set. Failed uploads remain drafts. Store distribution is a separate publisher operation: Chrome updates Store-managed extension code; the host updater never rewrites a Store directory. Supported protocol compatibility, rather than an exact fingerprint, permits asynchronous Store/host rollout.
+The publisher requires passing browser CI for the exact release tag, then uploads a draft, downloads every asset back and compares bytes before publishing the complete set. Failed uploads remain drafts. Store distribution is a separate publisher operation: Chrome updates Store-managed extension code; the host updater never rewrites a Store directory. Supported protocol compatibility, rather than an exact fingerprint, permits asynchronous Store/host rollout.
 
 ## Build and verify
 

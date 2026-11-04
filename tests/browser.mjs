@@ -133,7 +133,10 @@ try {
     const send=chrome.runtime.sendMessage.bind(chrome.runtime);
     globalThis.__catalogState='connected';
     chrome.runtime.sendMessage=(message,...args)=>{
-      if(message.command==='provider.catalog'&&message.payload?.provider==='codex-sdk')return Promise.resolve({ok:true,data:{state:globalThis.__catalogState,models:[{id:'fixture-model',label:'Fixture model',isDefault:true}],source:'sdk_catalog'}});
+      if(message.command==='provider.catalog'&&message.payload?.provider==='codex-sdk'){
+        if(message.payload.refresh&&globalThis.__catalogOnRefresh){globalThis.__catalogState=globalThis.__catalogOnRefresh;globalThis.__catalogOnRefresh=undefined;}
+        return Promise.resolve({ok:true,data:{state:globalThis.__catalogState,models:[{id:'fixture-model',label:'Fixture model',isDefault:true}],source:'sdk_catalog'}});
+      }
       return send(message,...args);
     };
   });
@@ -155,7 +158,7 @@ try {
   await panel.locator('#provider').selectOption('codex-sdk');
   await panel.waitForFunction(()=>!document.querySelector('#model').disabled&&!document.querySelector('#connect-provider').hidden);
   assert.equal(await panel.locator('#connect-provider').isVisible(),true);
-  await panel.evaluate(()=>{globalThis.__catalogState='connected';});
+  await panel.evaluate(()=>{globalThis.__catalogOnRefresh='connected';});
   await panel.locator('#connect-provider').click();
   await panel.locator('#connect-provider').waitFor({state:'hidden'});
   // Recover the complete UI after a transient startup failure, without a manual refresh.
