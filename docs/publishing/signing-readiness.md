@@ -6,7 +6,7 @@
 
 - Maintainer: Ondřej Halata, GitHub [`halatao`](https://github.com/halatao), contact `ondrej@halatao.cz`.
 - Public source: [`halatao/tabora-browser`](https://github.com/halatao/tabora-browser), created 1 October 2026; own source is MIT.
-- Released Windows x64 ZIP: [`preview-v0.6.2`](https://github.com/halatao/tabora-browser/releases/tag/preview-v0.6.2).
+- Released Windows x64 ZIP: [`preview-v0.6.3`](https://github.com/halatao/tabora-browser/releases/tag/preview-v0.6.3), including the separate Chrome Store extension ZIP.
 - Own C# launcher and TypeScript host are built by GitHub Actions. Packages include a file/dependency inventory and detached Ed25519 release-manifest signature.
 - A public-trust Authenticode certificate is not configured. An Inno Setup definition exists, but no signed setup EXE is published.
 
@@ -21,6 +21,8 @@ A specific eligibility inquiry was sent from `ondrej@halatao.cz` to `support@sig
 Do not remove Claude support or split production packages until an explicit implementation decision is made. Do not add a “code signing provided by SignPath” badge before actual approval.
 
 ## Proposed signing policy fields
+
+The public [release signing policy](code-signing-policy.md) distinguishes current manifest signatures from pending Authenticode/service approval and records the present approval-control limits.
 
 - Own files eligible for signing: Tabora launcher and installer, built from the protected release workflow.
 - Maintainer/reviewer and proposed signing approver: `halatao`; confirm the required MFA and approval process during onboarding.

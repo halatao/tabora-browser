@@ -1,6 +1,6 @@
 # Tabora Browser privacy policy
 
-**Effective 4 November 2026 · Tabora 0.6.2**
+**Effective 4 November 2026 · Tabora 0.6.3**
 
 Publisher and contact: Ondřej Halata, **ondrej@halatao.cz**. Project: [halatao/tabora-browser](https://github.com/halatao/tabora-browser).
 

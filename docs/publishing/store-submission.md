@@ -8,15 +8,16 @@
 | Publisher display name | Tabora Browser |
 | Store publisher ID | `0aa43023-1eb2-4102-8318-a94e93e58fbe` |
 | Account holder | Ondřej Halata; name confirmed by connected Google profile |
-| Developer/contact email | ondrej@halatao.cz; connected Gmail account matches |
+| Developer/contact email | ondrej@halatao.cz; the Store dashboard confirms the contact email is verified |
 | Homepage | https://github.com/halatao/tabora-browser |
 | Support | https://github.com/halatao/tabora-browser/issues |
 | Source license | MIT; third-party components retain their own licenses |
-| Latest prepared source version | 0.6.3 |
+| Uploaded Store version | 0.6.3, from the authenticated `preview-v0.6.3` release |
+| Category / listing language | Tools / English; the description discloses that the extension UI is Czech |
 | Existing unpacked extension ID | `kenmodennegnggpghfmlpbbdfomadfdc` |
 | Store item ID / public key | Draft item `ghkhjhmanloapainmhnnpkbopllcfomg` created on 4 November 2026; [public key](chrome-store-public-key.pem) exported from its dashboard and checked to derive that same ID |
 | Privacy policy | [Published policy](https://github.com/halatao/tabora-browser/blob/main/docs/privacy.md) |
-| DSA trader status / legal address | Owner selected trader; the dashboard reports verification pending through Google Payments. Do not copy identity documents or billing details into this repository. |
+| DSA trader status / legal address | Owner selected trader; the dashboard requires additional owner action through Google Payments. Do not copy identity documents or billing details into this repository. |
 | Account registration/payment status | Completed on 4 November 2026 with the owner's explicit approval of the developer agreement and USD 5 total fee; the dashboard confirmed successful registration. |
 
 ## Listing text
@@ -59,11 +60,11 @@ Single purpose: execute and observe user-authorized browser tasks for local AI a
 
 The extension bundles its executable code; its CSP disallows remote script loading. Model responses choose validated operations rather than supplying executable extension code. Native-host updates are separately signed program packages, not a mechanism for replacing Store-managed extension files.
 
-## Privacy declaration preparation
+## Privacy declaration
 
-Do not select “no user data handled.” Page content is processed even when a workflow stays local. Relevant categories include website content, authentication information for the optional vault, and browsing activity such as controlled-tab URLs/titles. Review other categories against the actual dashboard definitions and the intended use of arbitrary user-selected websites; page content can include communications or sensitive information.
+All nine data categories are selected because authorized tasks can process arbitrary user-selected pages and files. The category-by-category rationale is in the [privacy declaration worksheet](privacy-declaration.md). This does not represent a separate publisher tracking or advertising service. The form declares no remotely hosted executable extension code.
 
-Explain that agent/MCP outputs and selected model requests can leave the device. There is no publisher advertising backend. SDK/provider policies remain applicable. The owner must review the final disclosures and attestations before submission.
+Purpose and permission explanations and the privacy URL are saved. Agent/MCP outputs and selected model requests can leave the device; SDK/provider policies remain applicable. The three final data-use attestations still require the publisher's explicit confirmation before submission.
 
 ## Reviewer workflow
 
@@ -73,14 +74,18 @@ Explain that agent/MCP outputs and selected model requests can leave the device.
 4. Verify that Read-only mode blocks writes and that Risk mode is required to take over an existing tab.
 5. Model integrations and vault use are optional; reviewers need no real customer credentials. CAPTCHA, account MFA and OS security prompts require handoff.
 
-## Identity and remaining assets
+## Identity, assets and remaining gates
 
 The draft Store ID is `ghkhjhmanloapainmhnnpkbopllcfomg`, different from the unpacked ID `kenmodennegnggpghfmlpbbdfomadfdc`. Host 0.6.3 supports explicit, reversible channel migration and exact native origins; see [the migration procedure](../distribution.md#chrome-web-store-channel). Keep the current unpacked identity working during that migration. Do not submit a live item until the actual Store build and installation path have passed publisher acceptance.
 
 The dashboard rejected the original 0.6.2 extension ZIP because `manifest.key` is not allowed in a Store upload. A separate draft-upload ZIP was derived from the verified signed release by removing only that manifest field; every other file was checked unchanged. The released ZIP and installed extension were not modified. Starting with 0.6.3, packaging produces the Store variant automatically, checksummed and covered by the release signature.
 
-The draft contains the prepared description, homepage and support URLs. Purpose/permission explanations and the privacy URL are prepared in the privacy form. It has not been submitted for review. Remaining listing work includes category/language, icon, screenshots, final privacy disclosures/attestations, reviewer instructions and contact-email verification. The dashboard specifies a 128 × 128 store icon and at least one 1280 × 800 or 640 × 400 screenshot, JPEG or 24-bit PNG without alpha. CI generates these assets from the actual bundled panel in a synthetic profile and publishes a provenance record with them.
+The draft contains the saved description, homepage/support URLs, category/language, a 128 × 128 icon, two 1280 × 800 screenshots and reviewer instructions. Contact-email verification is complete. The reviewer instructions explain Windows host installation, Store registration, a harmless public-page MCP task and session cleanup; no customer login or paid model is required.
 
-Use the extension icon and screenshots from an isolated test account/CI fixture. Do not reuse screenshots of an ordinary logged-in user profile. Required dimensions, crop and Store form fields must be checked against the current dashboard before upload. Screenshots and any promotional image remain to be attached.
+The screenshots show the actual bundled Safe and Read-only panel in an isolated synthetic profile with vault off. Their provenance records version 0.6.3 and build fingerprint `bb6636a0f612c5704d01906de92d396121309cf90e544ceb88b1e9d4dd585bca`. Both screenshots are RGB PNGs without alpha; the icon uses the existing extension artwork. No ordinary user-profile screenshot was uploaded.
+
+The uploaded Store ZIP was checked against the Ed25519-signed release manifest (sequence 4), with SHA-256 `eff75993392d770020ec6607a083c8b84f7c7e3177747beadca66ba27f3eaeb0`. The release passed [browser CI](https://github.com/halatao/tabora-browser/actions/runs/41831273368) and [standalone packaging/update checks](https://github.com/halatao/tabora-browser/actions/runs/41831273363).
+
+The item is still a draft. After resaving the listing, the dashboard's submission checklist reports only the missing final data-use attestations. An earlier homepage URL timeout cleared on revalidation; a separate direct check also returned HTTP 200. Trader verification separately requires owner action. Resolve these gates, recheck the submission checklist, then send for review. Do not describe a draft or pending review as published.
 
 References: [registration](https://developer.chrome.com/docs/webstore/register/), [publishing](https://developer.chrome.com/docs/webstore/publish), [user-data disclosure](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), [extension identity](https://developer.chrome.com/docs/extensions/reference/manifest/key).
