@@ -42,6 +42,8 @@ jobs:
         run: npm run test:package -- release/payload
       - name: Test packaged offline update and broker generation change
         run: npm run test:package-update -- release/payload
+      - name: Test Store host update with retained unpacked files
+        run: node tests/package-update.mjs release/payload --store
       - name: Build Windows installer
         if: env.TABORA_RELEASE_CHANNEL == 'stable'
         shell: pwsh
