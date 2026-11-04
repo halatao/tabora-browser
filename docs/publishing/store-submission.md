@@ -1,6 +1,6 @@
 # Chrome Web Store submission kit
 
-**Prepared 4 November 2026 · draft, not submitted**
+**Submitted 4 November 2026 · awaiting Chrome Web Store review; not published**
 
 | Field | Proposed value / verified status |
 | --- | --- |
@@ -15,7 +15,8 @@
 | Uploaded Store version | 0.6.3, from the authenticated `preview-v0.6.3` release |
 | Category / listing language | Tools / English; the description discloses that the extension UI is Czech |
 | Existing unpacked extension ID | `kenmodennegnggpghfmlpbbdfomadfdc` |
-| Store item ID / public key | Draft item `ghkhjhmanloapainmhnnpkbopllcfomg` created on 4 November 2026; [public key](chrome-store-public-key.pem) exported from its dashboard and checked to derive that same ID |
+| Store item ID / public key | Item `ghkhjhmanloapainmhnnpkbopllcfomg` created on 4 November 2026; [public key](chrome-store-public-key.pem) exported from its dashboard and checked to derive that same ID |
+| Review / publication | Version 0.6.3 submitted for review on 4 November 2026. Automatic publication after approval is disabled. |
 | Privacy policy | [Published policy](https://github.com/halatao/tabora-browser/blob/main/docs/privacy.md) |
 | DSA trader status / legal address | Owner selected trader; the dashboard requires additional owner action through Google Payments. Do not copy identity documents or billing details into this repository. |
 | Account registration/payment status | Completed on 4 November 2026 with the owner's explicit approval of the developer agreement and USD 5 total fee; the dashboard confirmed successful registration. |
@@ -64,7 +65,7 @@ The extension bundles its executable code; its CSP disallows remote script loadi
 
 All nine data categories are selected because authorized tasks can process arbitrary user-selected pages and files. The category-by-category rationale is in the [privacy declaration worksheet](privacy-declaration.md). This does not represent a separate publisher tracking or advertising service. The form declares no remotely hosted executable extension code.
 
-Purpose and permission explanations and the privacy URL are saved. Agent/MCP outputs and selected model requests can leave the device; SDK/provider policies remain applicable. The three final data-use attestations still require the publisher's explicit confirmation before submission.
+Purpose and permission explanations and the privacy URL are saved. Agent/MCP outputs and selected model requests can leave the device; SDK/provider policies remain applicable. The publisher explicitly approved all three final data-use attestations, which were saved before submission.
 
 ## Reviewer workflow
 
@@ -76,7 +77,7 @@ Purpose and permission explanations and the privacy URL are saved. Agent/MCP out
 
 ## Identity, assets and remaining gates
 
-The draft Store ID is `ghkhjhmanloapainmhnnpkbopllcfomg`, different from the unpacked ID `kenmodennegnggpghfmlpbbdfomadfdc`. Host 0.6.3 supports explicit, reversible channel migration and exact native origins; see [the migration procedure](../distribution.md#chrome-web-store-channel). Keep the current unpacked identity working during that migration. Do not submit a live item until the actual Store build and installation path have passed publisher acceptance.
+The Store ID is `ghkhjhmanloapainmhnnpkbopllcfomg`, different from the unpacked ID `kenmodennegnggpghfmlpbbdfomadfdc`. Host 0.6.3 supports explicit, reversible channel migration and exact native origins; see [the migration procedure](../distribution.md#chrome-web-store-channel). Keep the current unpacked identity working during that migration. Packaged Store registration and update checks passed; acceptance using the actual Store-installed extension remains a publication gate.
 
 The dashboard rejected the original 0.6.2 extension ZIP because `manifest.key` is not allowed in a Store upload. A separate draft-upload ZIP was derived from the verified signed release by removing only that manifest field; every other file was checked unchanged. The released ZIP and installed extension were not modified. Starting with 0.6.3, packaging produces the Store variant automatically, checksummed and covered by the release signature.
 
@@ -86,6 +87,6 @@ The screenshots show the actual bundled Safe and Read-only panel in an isolated 
 
 The uploaded Store ZIP was checked against the Ed25519-signed release manifest (sequence 4), with SHA-256 `eff75993392d770020ec6607a083c8b84f7c7e3177747beadca66ba27f3eaeb0`. The release passed [browser CI](https://github.com/halatao/tabora-browser/actions/runs/41831273368) and [standalone packaging/update checks](https://github.com/halatao/tabora-browser/actions/runs/41831273363).
 
-The item is still a draft. After resaving the listing, the dashboard's submission checklist reports only the missing final data-use attestations. An earlier homepage URL timeout cleared on revalidation; a separate direct check also returned HTTP 200. Trader verification separately requires owner action. Resolve these gates, recheck the submission checklist, then send for review. Do not describe a draft or pending review as published.
+The dashboard confirms “Pending review.” The final attestations were approved and saved, and an earlier homepage URL timeout cleared on revalidation. Automatic publication was explicitly unchecked before submitting. Google warned that broad host permissions may require an extended review. Trader verification separately requires owner action. Complete that verification, address any reviewer requests and verify the actual Store installation before manually publishing. Do not describe pending review as publication.
 
 References: [registration](https://developer.chrome.com/docs/webstore/register/), [publishing](https://developer.chrome.com/docs/webstore/publish), [user-data disclosure](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), [extension identity](https://developer.chrome.com/docs/extensions/reference/manifest/key).

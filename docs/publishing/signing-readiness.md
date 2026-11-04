@@ -37,4 +37,4 @@ The existing stable workflow's PFX signing path is one implementation. A managed
 - Reading local Hyper-V VMs with `Get-VM` failed due to missing permissions. No Windows VM was created or modified. A full clean-Windows installer test remains pending.
 - The earlier local Inno Setup compiler installation was rejected with `blocked by policy`; it has not been retried here.
 
-The signing account and certificate approval remain external steps. The privacy policy and publisher preparation documents are approved for publication; the Store submission remains a draft. Project identity and CI provenance are documented, and the eligibility inquiry has been sent.
+The signing account and certificate approval remain external steps. The privacy policy and publisher preparation documents are published. Store version 0.6.3 was submitted for review with automatic publication disabled; trader verification separately requires owner action. Project identity and CI provenance are documented, and the eligibility inquiry has been sent.
