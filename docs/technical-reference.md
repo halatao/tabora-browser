@@ -175,6 +175,8 @@ Default data directory: `%LOCALAPPDATA%\TaboraBrowser`. Installation resolves it
 
 To update, stop managed profiles, `git pull --ff-only`, then rerun setup. Reload unpacked extensions in ordinary profiles. Do not move/delete the checkout while installed. Registrations are idempotent for the same checkout; a different checkout produces a conflict instead of replacing it.
 
+Since 0.5.6, MCP use starts a nonblocking repository version check. The agent receives a separate once-per-connection update notice and local installation steps when a newer version exists. `browser_update_check` supports an explicit refresh; failures return `unavailable`. Checks never install or reload anything. See [update checks](updates.md) for cache, source and opt-out details, and [background reliability](background-reliability.md) for `browser_diagnostics` and interrupted sessions.
+
 To uninstall, stop each managed profile, remove Tabora from the browser's extensions, run `scripts/uninstall-host.ps1`, and remove the MCP entry from clients that registered it (`codex mcp remove tabora-browser` / `claude mcp remove tabora-browser --scope user`). Vault and browser data are retained. Remove them only if you explicitly want to discard those accounts and credentials.
 
 ## Development and validation

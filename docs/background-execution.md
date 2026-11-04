@@ -1,5 +1,7 @@
 # Background execution (0.5.2)
 
+For the current 0.5.6 behavior, preparation of reads, bounded overlay waits and interruption diagnostics, see [Background reliability](background-reliability.md). The sections below record the original 0.5.2 implementation and its validation scope.
+
 ## Contract
 
 Opening with `active: false` and subsequent DOM/native actions no longer activate

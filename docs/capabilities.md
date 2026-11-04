@@ -13,6 +13,57 @@ Refs are opaque and document-bound. Continue through `coverage.nextCursor`; a
 partial snapshot does not imply complete data. Provide `baseSnapshotId` to request
 a delta. An unknown baseline returns a full snapshot.
 
+IPC error diagnostics use the existing response data envelope so older resident
+MCP clients receive the original error code without losing their connection or
+owned sessions. New clients additionally expose the bounded blocker details.
+Malformed IPC messages fail with `ipc_protocol_error` and log only that code to
+stderr. A genuine disconnect still revokes connection-owned sessions; reconnect
+never replays an action or silently transfers ownership to another connection.
+
+If nearest scrolling leaves a click target behind a fixed header or footer,
+the executor tries centered scrolling and repeats the live hit-test. Already
+exposed targets are not scrolled; modal and overlay blockers are not bypassed.
+
+Visible dialog controls are prioritized before background page targets, even
+when the site omits `aria-modal`. Visibility and a clickable hint do not prove
+pointer exposure. Failed DOM/native clicks return bounded `details.blockers`
+(tag, id, class, role and safe name), with the attempted target ID. Resolve the
+observed blocker and obtain fresh state; never force a click through it.
+The Page body target reports and scrolls `document.scrollingElement`; nested
+scroll targets continue to address their own containers. Redaction and
+observation share a 20,000-element scan budget. Incomplete redaction still
+blocks capture; no unmasked fallback is allowed.
+
+`browser_prepare` can translate an observed top-frame V2 target into a fresh
+compatibility menu, including generic clickable controls. Prefer
+`browser_plan`/`browser_commit` when retaining exact V2 stateVersion binding.
+`navigate` changes the location only; use `click` to activate JavaScript tabs,
+including tabs associated with URL fragments.
+
+Bounded raw action goals support `Close the dialog then click WEEKLY until
+"Weekly schedule" becomes visible.` Dismissal is restricted to unambiguous
+Close/Dismiss controls in observed dialogs. It never chooses Consent as a close
+action. Supply literal terminal evidence or an explicit typed workflow; a goal
+without terminal evidence returns `outcome_required`, and a dialog without a
+known dismissal control returns `dismiss_target_not_found`. Cookie choices
+must be named explicitly. The raw-goal grammar is English, not unrestricted
+natural-language automation.
+
+`browser_frames` returns each frame's URL, URL origin and independently verified
+effective origin. Verification reads only metadata in Chrome's isolated world;
+denied frame contents are never scanned. Inherited `about:blank` / `srcdoc` frames
+are readable only when their effective HTTP(S) origin has both the task grant and
+browser permission. Opaque origins (`origin: "null"`) remain blocked, including
+sandboxed frames whose URL looks same-origin. An unverified origin is JSON `null`.
+Diagnostics distinguish `frame_opaque_origin`, `frame_origin_not_granted`,
+`site_permission_required` (with `missingPermission`), `frame_origin_unverified`
+and `frame_origin_probe_failed`. `readerInjected` reports whether the sensor is
+already present; allowed frames load it on demand. To read an editor iframe, use
+its current `frameId` with `browser_state` and `browser_read`.
+
+Run `npm run build` then `node tests/frame-origin-browser.mjs` for the isolated
+Chromium regression covering inherited, cross-origin and opaque frames.
+
 `browser_plan` prepares one typed action for an exact `stateVersion`.
 `browser_commit` consumes that plan once, revalidates identity, permission, geometry
 and actionability, dispatches, and returns a new observation. An optional outcome
@@ -40,6 +91,9 @@ preview as a complete table.
 
 Frame discovery checks both browser host permission and the session's exact
 origin grants. Nested/open/closed shadow roots and slots are traversed locally.
+Shadow-root queries use only valid HTML shadow hosts; forms and other ineligible
+elements never reach Chrome's shadow-root API. An absent root is not cached,
+so a root attached later remains discoverable.
 Denied frames are not read. Native frame coordinates use a browser-source-bound
 geometry exchange; rotated or unsupported geometry fails before input.
 
@@ -71,6 +125,21 @@ and frames are masked before capture, with mask/geometry revalidation. Image
 bytes are explicit MCP output; they are not automatically sent to internal text
 decision adapters. `image_click` is bound to that capture's document, viewport,
 region and expiry. A changed layout/DPR invalidates coordinates.
+
+Redaction validation compares private-region intersections with the captured
+viewport clip. Movement wholly outside it does not invalidate a capture; a new
+private region entering it, changed masked coverage, target geometry, scroll or
+viewport changes still invalidate it. All private regions are rescanned.
+A capture invalidated by layout/redaction changes is discarded and retried once
+with freshly computed masks in the same document and debugger lease. Continued
+changes fail closed; no image from a failed attempt is exported.
+
+If `browser_state` supersedes a recipe observation before `browser_decide`, the
+recipe is observed again before the provider receives its choices. An action
+already selected by a provider is never silently rebound to a newer snapshot;
+observe and decide again if an intervening operation invalidates it.
+Requests carrying `selectOptionIndex` also require a new explicit observation:
+an index supplied against the old menu must not be reinterpreted.
 
 `browser_document_read` parses a session-owned artifact offline. PDF text uses
 PDF.js with evaluation/scripts/XFA/network disabled. Scans/images use local

@@ -43,8 +43,23 @@ export type DecisionResult = {
   usage?: { input: number; output: number; cachedInput?:number; reasoningOutput?:number }; costUsd?: number; confidence?: number;
   diagnostics?: {transport:'codex-app-server';coldStart:boolean;processId:number;startupMs:number;threadMs:number;turnMs:number;releaseMs:number;ttftMs?:number;promptChars?:number;contextIsolation?:'wire-enforced'|'fixture';envelope?:{inputChars:number;forwardedInputChars:number;requestChars:number;forwardedRequestChars:number;embeddedToolsRemoved:number};disabledMcpServers?:number;disabledPlugins?:number;mcpTools?:number};
 };
+export const actionDiagnosticSchema=z.object({targetId:z.string().max(120).optional(),blockers:z.array(z.object({tag:z.string().max(40),id:z.string().max(120),className:z.string().max(240),role:z.string().max(60),name:z.string().max(240),targetId:z.string().max(120).optional()}).strict()).max(9),
+  traceId:z.string().uuid().optional(),phase:z.enum(['queue','lifecycle','attach','render','actionability','dispatch','verify','cleanup','connection']).optional(),
+  cause:z.enum(['overlay','outside_viewport','geometry_unstable','render_timeout','debugger_conflict','discarded','frozen','disconnected','cleanup_failed']).optional(),
+  dispatch:z.enum(['not_sent','sent','unknown']).optional(),attempts:z.number().int().min(0).max(1000).optional(),elapsedMs:z.number().nonnegative().max(180000).optional(),deadlineMs:z.number().nonnegative().max(180000).optional(),
+  nextStep:z.enum(['observe','inspect_blocker','retry_read','reconnect','handoff','verify_outcome']).optional(),
+  geometry:z.object({x:z.number().finite(),y:z.number().finite(),width:z.number().finite(),height:z.number().finite(),viewportWidth:z.number().finite(),viewportHeight:z.number().finite()}).strict().optional(),
+  tab:z.object({active:z.boolean(),discarded:z.boolean(),frozen:z.boolean().optional(),windowState:z.enum(['normal','minimized','maximized','fullscreen','locked-fullscreen']).optional(),windowFocused:z.boolean().optional()}).strict().optional(),
+  documentId:z.string().max(100).optional(),frameId:z.number().int().nonnegative().optional(),
+  document:z.object({visibility:z.enum(['visible','hidden']),hasFocus:z.boolean()}).strict().optional(),
+}).strict();
+export type ActionDiagnostic=z.infer<typeof actionDiagnosticSchema>;
 export class PilotError extends Error {
-  constructor(public code: string, message = code) { super(message); }
+  constructor(public code: string, message = code,public details?:ActionDiagnostic) { super(message); }
+}
+export function safeErrorDetails(error:unknown){
+  if(!(error instanceof PilotError)||!/^(?:(?:target|background|tab)_[a-z_]+|session_interrupted|connection_lost|interaction_busy|modal_blocked|cancelled|action_outcome_unknown|stale_binding|verification_failed|navigation_out_of_scope|execution_failed|sensor_unavailable|readiness_timeout)$/.test(error.code))return undefined;
+  const parsed=actionDiagnosticSchema.safeParse(error.details);return parsed.success?parsed.data:undefined;
 }
 export function safeCode(error: unknown): string {
   if (error instanceof PilotError) return error.code;
@@ -79,7 +94,8 @@ export const idSchema = z.string().uuid();
 export const browserMode=z.enum(['safe','takeover','readonly']);
 export const profileSchema = z.object({id:idSchema,name:z.string().trim().min(1).max(80),mcpEnabled:z.boolean(),
   mode:browserMode.optional(),vaultEnabled:z.boolean().optional(),activeProvider:z.enum(['agent',...PROVIDERS]).optional(),
-  browserProfileKey:z.string().max(160).optional(),nameSource:z.enum(['automatic','selected','legacy']).optional()
+  browserProfileKey:z.string().max(160).optional(),nameSource:z.enum(['automatic','selected','legacy']).optional(),
+  managedProfile:z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/).optional(),nativeLifecycleVersion:z.literal(1).optional()
 }).strict();
 export type BrowserProfile = z.infer<typeof profileSchema>;
 export const secretScopeSchema = z.discriminatedUnion('type',[

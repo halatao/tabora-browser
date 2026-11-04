@@ -1,12 +1,14 @@
 import {actionSchema,outcomePredicate,observationDiff,type ObservationV2,type TargetV2} from '../capabilities.js';
 import {Registry} from './registry.js';
-import {accessibleName,ancestor,composedElements,content,description,role,section,visible} from './semantic.js';
+import {accessibleName,ancestor,composedElements,content,description,role,section,shadowRoot,visible,PAGE_SCAN_LIMIT,scrollContainer} from './semantic.js';
 import {reader,type ReadInput} from './reader.js';
 import {domAction} from './controls.js';
-import {exposedPoint,ready} from './actionability.js';
+import {exposedPoint,waitExposedPoint,ready,ExposureError} from './actionability.js';
+import {renderFrames} from './render-frames.js';
 import {siteArguments,validateSiteSchema} from '../site-schema.js';
 import {editorText} from './editor.js';
 import {ownedCombobox} from './widgets.js';
+import {clippedRedactions,type CaptureRect} from './capture-redaction.js';
 
 type SensorInput={credential?:{username:string;password:string};op:'credential'|'observe'|'read'|'action'|'point'|'cancel'|'native_prepare'|'native_validate'|'native_finish'|'frame_arm'|'frame_send'|'frame_geometry'|'verify'|'capture_mask'|'capture_clear'|'capture_validate'|'download_target'|'site_discover'|'site_call';origin:string;sessionId:string;documentToken?:string;allowedOrigins?:string[];snapshotId?:string;cursor?:number;limit?:number;baseSnapshotId?:string;read?:ReadInput;action?:unknown;targetId?:string;leaseId?:string;nonce?:string;expect?:unknown;redactTargets?:string[];toolRef?:string;arguments?:unknown;release?:boolean;fresh?:boolean;visual?:{point:{x:number;y:number};rect:string}};
 type World=typeof globalThis&{__taboraSiteAbort?:AbortController;__taboraFrameListener?:(event:MessageEvent)=>void;__taboraSensor?:{sessionId:string;registry:Registry;native?:{id:string;action:ReturnType<typeof actionSchema.parse>;expires:number;point:{x:number;y:number};identity:string;focus?:Element}};__taboraOperation?:(input:SensorInput)=>Promise<unknown>};
@@ -17,7 +19,7 @@ const selector='body,a[href],button,input:not([type="hidden"]),textarea,select,f
 const frameRequests=new Map<string,{expires:number;element?:HTMLIFrameElement}>();
 let masks:HTMLElement[]=[];
 let maskExpiry:ReturnType<typeof setTimeout>|undefined;
-let captureGuard:{target:Element;geometry:string;sensitive:string;extra:Element[];sessionId:string}|undefined;
+let captureGuard:{target:Element;geometry:string;sensitive:string;clip:CaptureRect;viewport:string;extra:Element[];sessionId:string}|undefined;
 const siteTools=new Map<string,{metadata:string;tool:any;sessionId:string}>();
 async function credentialFill(input:SensorInput,registry:Registry){
   if(!input.credential||!input.snapshotId||!input.targetId)throw new Error('invalid_input');
@@ -34,10 +36,11 @@ async function credentialFill(input:SensorInput,registry:Registry){
   catch{return {ok:false,filled,code:'partial_write',submitted:false};}
 }
 async function bounded<T>(promise:Promise<T>,ms:number,code:string){let timer:ReturnType<typeof setTimeout>|undefined;try{return await Promise.race([promise,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(code)),ms);})]);}finally{clearTimeout(timer);}}
-function activeElement(){let active=document.activeElement;for(let depth=0;active instanceof HTMLElement&&depth<32;depth++){const inner=(active.shadowRoot??chrome.dom.openOrClosedShadowRoot(active))?.activeElement;if(!inner)break;active=inner;}return active;}
+function activeElement(){let active=document.activeElement;for(let depth=0;active instanceof HTMLElement&&depth<32;depth++){const inner=shadowRoot(active)?.activeElement;if(!inner)break;active=inner;}return active;}
 function clearMasks(){clearTimeout(maskExpiry);maskExpiry=undefined;masks.forEach(mask=>mask.remove());masks=[];captureGuard=undefined;}
 const rectangle=(el:Element)=>{const r=el.getBoundingClientRect();return {x:r.left,y:r.top,width:r.width,height:r.height};};
-function privateRegions(extra:Element[]){const scan=composedElements(document);if(scan.truncated)throw new Error('capture_redaction_incomplete');return [...scan.elements.filter(node=>node.matches('input,textarea,select,[contenteditable="true"],[data-private],[data-sensitive],iframe')),...extra];}
+const captureViewport=()=>JSON.stringify([scrollX,scrollY,innerWidth,innerHeight]);
+function privateRegions(extra:Element[]){const scan=composedElements(document,PAGE_SCAN_LIMIT);if(scan.truncated)throw new Error('capture_redaction_incomplete');return [...scan.elements.filter(node=>node.matches('input,textarea,select,[contenteditable="true"],[data-private],[data-sensitive],iframe')),...extra];}
 function writeIdentity(el:Element){const row=ancestor(el,'[data-id],[data-key],[aria-rowindex]');return JSON.stringify([el.tagName,el.getAttribute('role'),el.getAttribute('type'),el.getAttribute('href'),row?.getAttribute('data-id'),row?.getAttribute('data-key'),row?.getAttribute('aria-rowindex')]);}
 if(world.__taboraFrameListener)removeEventListener('message',world.__taboraFrameListener);
 world.__taboraFrameListener=event=>{
@@ -67,7 +70,7 @@ function describe(el:Element):Omit<TargetV2,'id'>{
   if(el instanceof HTMLAnchorElement){try{const url=new URL(el.href);if(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password)target.href=url.href;}catch{}}
   if(el.matches('table,[role="grid"],[role="table"]')){target.rowCount=el.querySelectorAll('tr,[role="row"]').length;const total=Number(el.getAttribute('aria-rowcount'));target.totalRows=total>0?total:target.rowCount;target.virtualized=total>target.rowCount;}
   target.recordKey=el.getAttribute('data-id')??el.getAttribute('data-key')??el.getAttribute('aria-rowindex')??undefined;
-  const style=getComputedStyle(el);if(/auto|scroll/.test(style.overflowY)&&el.scrollHeight>el.clientHeight||el===document.scrollingElement){target.scrollable=true;target.scroll={x:el.scrollLeft,y:el.scrollTop,viewportWidth:el.clientWidth,viewportHeight:el.clientHeight,maxX:Math.max(0,el.scrollWidth-el.clientWidth),maxY:Math.max(0,el.scrollHeight-el.clientHeight)};}
+  const scrolling=scrollContainer(el),style=getComputedStyle(scrolling);if(/auto|scroll/.test(style.overflowY)&&scrolling.scrollHeight>scrolling.clientHeight||scrolling===document.scrollingElement){target.scrollable=true;target.scroll={x:scrolling.scrollLeft,y:scrolling.scrollTop,viewportWidth:scrolling.clientWidth,viewportHeight:scrolling.clientHeight,maxX:Math.max(0,scrolling.scrollWidth-scrolling.clientWidth),maxY:Math.max(0,scrolling.scrollHeight-scrolling.clientHeight)};}
   if(['link','button'].includes(r)){
     const menu=ancestor(el,'nav li,[role="menuitem"],.admin__menu li');
     if(menu){const labels=Array.from(menu.querySelectorAll('a')).filter(node=>node!==el).map(node=>content(node,120,true).replace(/\s+/g,' ').trim()).filter(Boolean);target.contains=[...new Set(labels)].slice(0,24);target.containsTruncated=labels.length>24;}
@@ -76,7 +79,7 @@ function describe(el:Element):Omit<TargetV2,'id'>{
 }
 world.__taboraOperation=async(input:SensorInput)=>{
   try{
-    if(input.origin!==location.origin||!['https:','http:'].includes(location.protocol))throw new Error('stale_binding');
+    if(input.origin!==globalThis.origin||!/^https?:\/\//.test(globalThis.origin))throw new Error('stale_binding');
     if(input.op==='cancel'){if(world.__taboraSensor?.sessionId===input.sessionId&&(!input.documentToken||world.__taboraSensor.registry.token===input.documentToken)){world.__taboraSiteAbort?.abort();world.__taboraSiteAbort=undefined;siteTools.clear();clearMasks();world.__taboraSensor.registry.close();world.__taboraSensor=undefined;}return {ok:true};}
     if(world.__taboraSensor&&world.__taboraSensor.sessionId!==input.sessionId){world.__taboraSensor.registry.close();world.__taboraSensor=undefined;}
     const state=world.__taboraSensor??={sessionId:input.sessionId,registry:new Registry()},registry=state.registry;
@@ -84,7 +87,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
     if(input.op==='site_discover'||input.op==='site_call'){
       const context=(document as any).modelContext;
       if(!isSecureContext||typeof context?.getTools!=='function'||typeof context?.executeTool!=='function')return {ok:true,status:'unsupported',reason:'webmcp_runtime_unavailable',tools:[]};
-      const tools=(await bounded<any[]>(Promise.resolve(context.getTools()),3000,'site_discovery_timeout')).filter((tool:any)=>tool.origin===location.origin&&tool.window===window).slice(0,20);
+      const tools=(await bounded<any[]>(Promise.resolve(context.getTools()),3000,'site_discovery_timeout')).filter((tool:any)=>tool.origin===globalThis.origin&&tool.window===window).slice(0,20);
       const metadata=(tool:any)=>JSON.stringify({name:tool.name,description:tool.description,inputSchema:tool.inputSchema,origin:tool.origin});
       if(input.op==='site_discover'){
         siteTools.clear();context.addEventListener('toolchange',()=>siteTools.clear(),{once:true});
@@ -95,12 +98,12 @@ world.__taboraOperation=async(input:SensorInput)=>{
       if(!entry||entry.sessionId!==input.sessionId||!tools.some((tool:any)=>metadata(tool)===entry.metadata))throw new Error('stale_site_tool');
       siteArguments(entry.tool.inputSchema,input.arguments);
       const controller=new AbortController();world.__taboraSiteAbort=controller;const timer=setTimeout(()=>controller.abort(),10000),major=Number(navigator.userAgent.match(/(?:Chrome|Chromium)\/(\d+)/)?.[1]??0);
-      try{const result=await bounded(Promise.resolve(context.executeTool(entry.tool,major>=155?input.arguments:JSON.stringify(input.arguments),{signal:controller.signal})),10000,'site_tool_timeout'),text=typeof result==='string'?result:JSON.stringify(result)??'null';return {ok:true,dispatch:'sent',outcome:'unverified',text:text.slice(0,16000),truncated:text.length>16000,provenance:{source:'site_tool',trust:'untrusted',origin:location.origin,documentToken:registry.token}};}
+      try{const result=await bounded(Promise.resolve(context.executeTool(entry.tool,major>=155?input.arguments:JSON.stringify(input.arguments),{signal:controller.signal})),10000,'site_tool_timeout'),text=typeof result==='string'?result:JSON.stringify(result)??'null';return {ok:true,dispatch:'sent',outcome:'unverified',text:text.slice(0,16000),truncated:text.length>16000,provenance:{source:'site_tool',trust:'untrusted',origin:globalThis.origin,documentToken:registry.token}};}
       catch{return {ok:true,dispatch:'unknown',outcome:'unknown',code:'site_tool_interrupted'};}finally{clearTimeout(timer);if(world.__taboraSiteAbort===controller)world.__taboraSiteAbort=undefined;}
     }
     if(input.op==='capture_clear'){clearMasks();return {ok:true};}
     if(input.op==='capture_validate'){
-      if(!captureGuard||captureGuard.sessionId!==input.sessionId||!captureGuard.target.isConnected||JSON.stringify(rectangle(captureGuard.target))!==captureGuard.geometry||JSON.stringify(privateRegions(captureGuard.extra).map(rectangle))!==captureGuard.sensitive)throw new Error('capture_redaction_changed');
+      if(!captureGuard||captureGuard.sessionId!==input.sessionId||!captureGuard.target.isConnected||captureViewport()!==captureGuard.viewport||JSON.stringify(rectangle(captureGuard.target))!==captureGuard.geometry||JSON.stringify(clippedRedactions(privateRegions(captureGuard.extra).map(rectangle),captureGuard.clip))!==captureGuard.sensitive)throw new Error('capture_redaction_changed');
       return {ok:true};
     }
     if(input.op==='capture_mask'||input.op==='download_target'){
@@ -108,18 +111,22 @@ world.__taboraOperation=async(input:SensorInput)=>{
       const el=registry.resolve(input.targetId!,true).el;ready(el);
       if(input.op==='download_target'){
         if(!(el instanceof HTMLAnchorElement))throw new Error('wrong_target_kind');const url=new URL(el.href);
-        if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin)throw new Error('navigation_out_of_scope');
+        if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.origin!==globalThis.origin)throw new Error('navigation_out_of_scope');
         registry.snapshots.delete(snapshot.snapshotId);return {ok:true,url:url.href};
       }
       clearMasks();exposedPoint(el);
+      // Let renderer activation and any required scroll settle before measuring
+      // masks. Revalidate the observed element after yielding to the page.
+      await renderFrames();
+      registry.resolve(input.targetId!,true);exposedPoint(el);
       const rect=el.getBoundingClientRect(),left=Math.max(0,rect.left),top=Math.max(0,rect.top),width=Math.min(innerWidth,rect.right)-left,height=Math.min(innerHeight,rect.bottom)-top;
       if(width<=0||height<=0||width*height>16000000)throw new Error('image_size_limit');
-      const extra=(input.redactTargets??[]).map(id=>registry.resolve(id).el),sensitive=privateRegions(extra);
-      const pixelRedaction={width,height,masks:sensitive.map(node=>{const r=rectangle(node);return {...r,x:r.x-left,y:r.y-top};})};
-      captureGuard={target:el,geometry:JSON.stringify(rectangle(el)),sensitive:JSON.stringify(sensitive.map(rectangle)),extra,sessionId:input.sessionId};
-      for(const node of sensitive){const r=node.getBoundingClientRect();if(!r.width||!r.height)continue;const mask=document.createElement('div');mask.setAttribute('aria-hidden','true');mask.style.cssText=`position:fixed!important;left:${r.left}px!important;top:${r.top}px!important;width:${r.width}px!important;height:${r.height}px!important;background:#000!important;z-index:2147483647!important;pointer-events:none!important;`;document.documentElement.append(mask);masks.push(mask);}
-      maskExpiry=setTimeout(clearMasks,5000);await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
-      return {ok:true,clip:{x:left+scrollX,y:top+scrollY,width,height,scale:1},targetRect:JSON.stringify(rectangle(el)),viewport:{x:left,y:top},pixelRedaction,provenance:{source:'page',trust:'untrusted',documentToken:registry.token,targetId:input.targetId,origin:location.origin,path:location.pathname},redactedRegions:sensitive.length};
+      const clip={x:left,y:top,width,height},extra=(input.redactTargets??[]).map(id=>registry.resolve(id).el),sensitive=clippedRedactions(privateRegions(extra).map(rectangle),clip);
+      const pixelRedaction={width,height,masks:sensitive.map(r=>({...r,x:r.x-left,y:r.y-top}))};
+      captureGuard={target:el,geometry:JSON.stringify(rectangle(el)),sensitive:JSON.stringify(sensitive),clip,viewport:captureViewport(),extra,sessionId:input.sessionId};
+      for(const r of sensitive){const mask=document.createElement('div');mask.setAttribute('aria-hidden','true');mask.style.cssText=`position:fixed!important;left:${r.x}px!important;top:${r.y}px!important;width:${r.width}px!important;height:${r.height}px!important;background:#000!important;z-index:2147483647!important;pointer-events:none!important;`;document.documentElement.append(mask);masks.push(mask);}
+      maskExpiry=setTimeout(clearMasks,5000);await renderFrames();
+      return {ok:true,clip:{x:left+scrollX,y:top+scrollY,width,height,scale:1},targetRect:JSON.stringify(rectangle(el)),viewport:{x:left,y:top},pixelRedaction,provenance:{source:'page',trust:'untrusted',documentToken:registry.token,targetId:input.targetId,origin:globalThis.origin,path:location.pathname},redactedRegions:sensitive.length};
     }
     if(input.op==='verify'){
       const expect=outcomePredicate.parse(input.expect);if(expect.type==='url')return {ok:true,verified:location.href===expect.equals};
@@ -136,7 +143,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
       // not for page-wide network or DOM idleness.
       while(request&&!request.element&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5));
       const el=request?.element;frameRequests.delete(input.nonce!);
-      if(!el?.isConnected)throw new Error('frame_geometry_unavailable');ready(el);
+      if(!el?.isConnected)throw new Error('frame_geometry_unavailable');ready(el);exposedPoint(el);
       const rect=el.getBoundingClientRect(),style=getComputedStyle(el),matrix=new DOMMatrix(style.transform==='none'?undefined:style.transform);
       if(matrix.b||matrix.c||!matrix.is2D||rect.width<=0||rect.height<=0)throw new Error('unsupported_frame_transform');
       const sx=rect.width/el.offsetWidth,sy=rect.height/el.offsetHeight;
@@ -153,9 +160,13 @@ world.__taboraOperation=async(input:SensorInput)=>{
     if(input.op==='observe'){
       const started=performance.now(),scan=registry.scan(input.fresh);
       const roots=new Map<ShadowRoot,number>();
-      for(const el of scan.elements){const root=el.shadowRoot??(el instanceof HTMLElement?chrome.dom.openOrClosedShadowRoot(el):null);if(root)roots.set(root,roots.size+1);}
+      for(const el of scan.elements){const root=shadowRoot(el);if(root)roots.set(root,roots.size+1);}
       const rootPath=(el:Element)=>{const path:number[]=[];let root=el.getRootNode();for(let depth=0;root instanceof ShadowRoot&&depth<32;depth++){const ordinal=roots.get(root);if(ordinal===undefined)break;path.unshift(ordinal);root=root.host.getRootNode();}return path;};
       const candidates=scan.elements.filter(el=>(el.matches(selector)||el.matches('p')&&rootPath(el).length||ownedCombobox(el)||el.scrollHeight>el.clientHeight&&/auto|scroll/.test(getComputedStyle(el).overflowY))&&(!['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)));
+      // Dialog controls must be discoverable before a long background page.
+      const dialogs=new Set(scan.elements.filter(el=>el.matches('dialog,[role="dialog"]')&&visible(el)));
+      const priority=new Map(candidates.map(el=>{const dialog=ancestor(el,'dialog,[role="dialog"]');return [el,el===document.body?0:dialog&&dialogs.has(dialog)?1:2];}));
+      candidates.sort((a,b)=>priority.get(a)!-priority.get(b)!);
       const cursor=input.cursor??0,limit=Math.min(100,input.limit??60),targets:TargetV2[]=[];let seen=0,budget=24000;
       let semanticHits=0,metadataTruncated=false;
       for(const el of candidates){
@@ -172,7 +183,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
       }
       registry.prune();const next=seen>cursor+targets.length?cursor+targets.length:null;
       let data='';try{data=content(document.body,32000);}catch(error){if(error instanceof Error&&error.message==='reader_size_limit')metadataTruncated=true;else throw error;}let hash=2166136261;for(let index=0;index<data.length;index++)hash=Math.imul(hash^data.charCodeAt(index),16777619);
-      const snapshot:ObservationV2={schemaVersion:2,snapshotId:crypto.randomUUID(),epoch:registry.epoch,dataVersion:String(hash>>>0),origin:location.origin,path:location.pathname,title:document.title.slice(0,500),targets,coverage:{scanned:scan.elements.length,targetCount:targets.length,truncated:scan.truncated||next!==null,cursor,nextCursor:next},provenance:{source:'page',trust:'untrusted',documentToken:registry.token}};
+      const snapshot:ObservationV2={schemaVersion:2,snapshotId:crypto.randomUUID(),epoch:registry.epoch,dataVersion:String(hash>>>0),origin:globalThis.origin,path:location.pathname,title:document.title.slice(0,500),targets,coverage:{scanned:scan.elements.length,targetCount:targets.length,truncated:scan.truncated||next!==null,cursor,nextCursor:next},provenance:{source:'page',trust:'untrusted',documentToken:registry.token}};
       const sequence=candidates.filter(el=>visible(el)||el instanceof HTMLInputElement&&el.type==='file').map(el=>registry.reference(el)).join(',');
       const previous=cursor===0&&input.baseSnapshotId?registry.snapshots.get(input.baseSnapshotId):undefined,continuationOf=registry.save(snapshot,sequence);
       snapshot.coverage.truncated ||= metadataTruncated;return {ok:true,snapshot:previous?observationDiff(previous,snapshot):snapshot,fullSnapshot:!previous,continuationOf,timings:{sensorMs:Math.round(performance.now()-started),treeCacheHit:scan.cached,semanticHits}};
@@ -189,9 +200,9 @@ world.__taboraOperation=async(input:SensorInput)=>{
     // Consume before dispatch. The caller must observe a new snapshot before another write.
     registry.snapshots.delete(baseline.snapshotId);
     if(input.op==='native_prepare'){
-      const el=registry.resolve(action.targetId,true).el;ready(el);
+      const el=registry.resolve(action.targetId,true).el;
       if(el instanceof HTMLInputElement&&['password','file'].includes(el.type)||ancestor(el,'[data-private],[data-sensitive]')||['current-password','new-password','one-time-code'].includes(el.getAttribute('autocomplete')?.trim().split(/\s+/).at(-1)??''))throw new Error('sensitive_or_unsupported_field');
-      if(el instanceof HTMLAnchorElement){const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin&&!input.allowedOrigins?.includes(url.origin))throw new Error('navigation_out_of_scope');}
+      if(el instanceof HTMLAnchorElement){const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==globalThis.origin&&!input.allowedOrigins?.includes(url.origin))throw new Error('navigation_out_of_scope');}
       if(action.type==='check'){
         const checked=el instanceof HTMLInputElement?el.checked:el.getAttribute('aria-checked')==='true';
         if(checked===action.checked&&el.getAttribute('aria-checked')!=='mixed'&&!(el instanceof HTMLInputElement&&el.indeterminate))return {ok:true,dispatch:'not_needed',outcome:'verified'};
@@ -199,15 +210,16 @@ world.__taboraOperation=async(input:SensorInput)=>{
         if(!action.checked&&el.matches('input[type="radio"],[role="radio"]'))throw new Error('unsupported_radio_uncheck');
       }
       if(action.type==='image_click'&&(!input.visual||JSON.stringify(rectangle(el))!==input.visual.rect))throw new Error('stale_capture');
-      const point=exposedPoint(el,action.type==='image_click'?input.visual!.point:undefined);
-      const initial=el.getBoundingClientRect();await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+      const point=await waitExposedPoint(()=>registry.resolve(action.targetId,true).el,action.type==='image_click'?input.visual!.point:undefined);
+      const initial=el.getBoundingClientRect();await renderFrames(1500,true);registry.resolve(action.targetId,true);ready(el);
       const final=el.getBoundingClientRect();if(['x','y','width','height'].some(key=>Math.abs((initial as any)[key]-(final as any)[key])>1))throw new Error('target_moved');
       if(action.type==='key'){if(!(el instanceof HTMLElement))throw new Error('wrong_target_kind');const focus=ownedCombobox(el)??el;focus.focus();if(activeElement()!==focus)throw new Error('focus_failed');}
       if(action.type==='fill'){if(!(el instanceof HTMLTextAreaElement)&&!(el instanceof HTMLInputElement&&['text','email','search','tel','url'].includes(el.type)))throw new Error('unsupported_native_field');ready(el,true);el.focus();el.select();if(activeElement()!==el)throw new Error('focus_failed');}
-      const destination=action.type==='drag'?exposedPoint(registry.resolve(action.destinationId,true).el):undefined;
+      const destination=action.type==='drag'?await waitExposedPoint(()=>registry.resolve(action.destinationId,true).el):undefined;
+      registry.resolve(action.targetId,true);ready(el);
       state.native={id:crypto.randomUUID(),action,expires:Date.now()+15000,point,identity:writeIdentity(el),focus:['key','fill'].includes(action.type)?activeElement()??undefined:undefined};
       return {ok:true,leaseId:state.native.id,point,destination};
     }
-    return {ok:true,...domAction(registry,action,input.allowedOrigins)};
-  }catch(error){return {ok:false,code:error instanceof Error&&/^[a-z_]+$/.test(error.message)?error.message:'invalid_request'};}
+    return {ok:true,...await domAction(registry,action,input.allowedOrigins)};
+  }catch(error){return {ok:false,code:error instanceof Error&&/^[a-z_]+$/.test(error.message)?error.message:'invalid_request',details:error instanceof ExposureError?{phase:'actionability',dispatch:'not_sent',nextStep:'inspect_blocker',...error.details,targetId:input.targetId??(input.action as any)?.targetId,document:{visibility:document.visibilityState,hasFocus:document.hasFocus()}}:error instanceof Error&&error.message==='background_render_timeout'?{blockers:[],phase:'render',cause:'render_timeout',dispatch:'not_sent',nextStep:'retry_read'}:undefined};}
 };

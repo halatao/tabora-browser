@@ -2,9 +2,9 @@ import {PilotError,type Snapshot} from '../shared.js';
 import type {BrowserAction,TargetV2,ObservationV2} from '../capabilities.js';
 import {answerFacts,listAnswerFacts,relevantFacts,type Fact} from './evidence-facts.js';
 
-export type ObservedFrame={frameId:number;state:{stateVersion:string;binding:{tabId?:number;documentId:string;origin:string};humanProgress?:{status:string;reason:string};snapshot:ObservationV2}};
+export type ObservedFrame={frameId:number;state:{stateVersion:string;binding:{tabId?:number;documentId:string;origin:string};humanProgress?:{status:string;reason:string};backgroundReadiness?:{rendered:boolean;geometry:'live_dom'};snapshot:ObservationV2}};
 export type GoalOperation={description:string;frameId:number;stateVersion:string;snapshot:ObservationV2;action?:BrowserAction;read?:{targetId:string;format:string;offset:number;limit:number}};
-type Obligation={name:string;count:number;done:number};
+type Obligation={name:string;count:number;done:number;dismiss?:boolean;targetId?:string};
 const number=(value:string)=>({one:1,two:2,three:3}[value.toLowerCase()]??Number(value));
 const clean=(value:string)=>value.trim().replace(/^["“']|["”']$/g,'');
 
@@ -31,12 +31,16 @@ export class GoalPlan{
     if(option){this.mode='select';this.option=clean(option[1]);return;}
     const literals=[...goal.matchAll(/"([^"\n]{1,16000})"|“([^”\n]{1,16000})”/gu)].map(m=>m[1]??m[2]);
     if(/\b(?:enter|fill|replace)\b/i.test(goal)&&literals.length===1){this.mode='fill';this.value=literals[0];return;}
-    if(!/^click\b/i.test(goal))throw new PilotError('unsupported_intent');
+    if(!/^(?:click|close|dismiss)\b/i.test(goal))throw new PilotError('unsupported_intent');
     this.mode='sequence';
     for(const clause of goal.split(/\bthen\b|,\s*then\b|\.\s*Finish\b/i)){
-      const click=clause.match(/\bclick\s+(.+?)(?=\s+(?:twice|once|\d+ times|in\b|and\b)|[,.]|$)/i);
+      const click=clause.match(/\bclick\s+(.+?)(?=\s+(?:twice|once|\d+ times|in\b|and\b|until\b)|[,.]|$)/i);
+      const dismiss=clause.match(/^\s*(?:close|dismiss)\s+(?:the\s+)?(ad|advertisement|dialog|popup|overlay)\b/i);
+      const namedDismiss=clause.match(/^\s*(?:close|dismiss)\s+["“]([^"”]+)["”]/i);
       const remove=clause.match(/^\s*(?:,\s*)?delete\s+(?:one|1)\b/i);
-      if(click){const repetition=clause.match(/\b(twice|once|\d+ times)\b/i)?.[1]??'once';const count=repetition.toLowerCase()==='twice'?2:repetition.toLowerCase()==='once'?1:parseInt(repetition);if(count>10)throw new PilotError('unsupported_intent');this.obligations.push({name:clean(click[1]),count,done:0});}
+      if(dismiss)this.obligations.push({name:'',count:1,done:0,dismiss:true});
+      else if(namedDismiss)this.obligations.push({name:clean(namedDismiss[1]),count:1,done:0});
+      else if(click){const repetition=clause.match(/\b(twice|once|\d+ times)\b/i)?.[1]??'once';const count=repetition.toLowerCase()==='twice'?2:repetition.toLowerCase()==='once'?1:parseInt(repetition);if(count>10)throw new PilotError('unsupported_intent');this.obligations.push({name:clean(click[1]),count,done:0});}
       else if(remove)this.obligations.push({name:'Delete',count:1,done:0});
     }
     const text=goal.match(/until\s+["“]?(.+?)["”]?\s+becomes?\s+visible/i);
@@ -50,6 +54,7 @@ export class GoalPlan{
     }
     const count=goal.match(/exactly\s+(one|two|three|\d+)\s+(.+?)\s+buttons?\s+remaining/i);
     if(count)this.expectedCount={count:number(count[1]),name:clean(count[2])};
+    if(this.obligations.some(o=>o.dismiss)&&!this.expectedText&&!this.expectedCount&&!this.absentKind)throw new PilotError('outcome_required');
     if(!this.obligations.length||(!this.expectedText&&!this.expectedCount&&!this.absentKind))throw new PilotError('unsupported_intent');
   }
   get retrieval(){return this.mode==='retrieval';}
@@ -140,14 +145,20 @@ export class GoalPlan{
     }
     if(this.mode==='sequence'){
       const next=this.obligations.find(o=>o.done<o.count);
-      if(next){const matches=this.controls(frames,['button','link']).filter(({target})=>target.name===next.name&&!target.disabled);if(matches.length>1&&next.name!=='Delete')throw new PilotError('ambiguous_target');if(matches.length)add(matches[0].frame,matches[0].target,{type:'click',targetId:matches[0].target.id,backend:'dom'});}
+      if(next){
+        const matches=frames.flatMap(frame=>frame.state.snapshot.targets.filter(target=>target.visible&&!target.secret&&!target.disabled&&(['button','link','tab'].includes(target.kind)||target.clickable)&&
+          (next.dismiss?/^(?:close|dismiss|close dialog|dismiss dialog|×|✕)$/i.test(target.name)&&frame.state.snapshot.targets.some(dialog=>dialog.kind==='dialog'&&dialog.visible&&dialog.name===target.section):target.name===next.name)).map(target=>({frame,target})));
+        if(matches.length>1&&next.name!=='Delete')throw new PilotError('ambiguous_target');
+        if(next.dismiss&&!matches.length)throw new PilotError('dismiss_target_not_found');
+        if(matches.length){next.targetId=matches[0].target.id;add(matches[0].frame,matches[0].target,{type:'click',targetId:matches[0].target.id,backend:'dom'});}
+      }
     }
     return operations;
   }
   record(action:BrowserAction,target:TargetV2,dispatch:string|undefined,outcome:string|undefined){
     if(this.mode!=='sequence'||action.type!=='click')return;
     const next=this.obligations.find(o=>o.done<o.count);
-    if(next&&target.name===next.name&&dispatch==='sent'&&outcome!=='failed'&&outcome!=='unknown')next.done++;
+    if(next&&(next.dismiss?target.id===next.targetId:target.name===next.name)&&dispatch==='sent'&&outcome!=='failed'&&outcome!=='unknown')next.done++;
   }
 }
 

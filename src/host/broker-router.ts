@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { PilotError, imageDecisionCapability, type BrowserProfile } from '../shared.js';
+import { PilotError,safeCode, imageDecisionCapability, type BrowserProfile } from '../shared.js';
+import type {UpdateChecker} from './updates.js';
 import { toolDefinitions, workflowFileSchema, type BrowserTool } from '../browser-api.js';
 import {RunController} from './run-controller.js';
 import {admitRun} from './run-admission.js';
@@ -8,12 +9,12 @@ import {fileCommands} from '../file-contract.js';
 import {readDocument} from './documents.js';
 import {redactImage,imagePreview} from './image-redaction.js';
 import {InteractiveQueue,interactiveCommands} from './interactive-queue.js';
-type Connection={profile:BrowserProfile;call:(command:string,payload?:unknown)=>Promise<any>};
+type Connection={profile:BrowserProfile;call:(command:string,payload?:unknown)=>Promise<any>;maintenanceCall?:(command:string,payload?:unknown)=>Promise<any>};
 type Session={id:string;profileId:string;name:string;owner:string};
 export class BrokerRouter {
   private input=new InteractiveQueue();
   async execute<T>(command:string,operation:()=>Promise<T>){return interactiveCommands.has(command)?this.input.run(operation):operation();}
-  constructor(readonly runs=new RunController(),readonly files?:ArtifactStore){}
+  constructor(readonly runs=new RunController(),readonly files?:ArtifactStore,private updates?:UpdateChecker){}
   async workflowCall(scope:FileScope,call:Connection['call'],command:string,input:any){
     if(command==='workflow.file'){
       if(!this.files)throw new PilotError('files_unavailable');
@@ -71,7 +72,16 @@ export class BrokerRouter {
   }
   private connections=new Map<string,Connection>();
   private sessions=new Map<string,Session>();
-  register(connection:Connection){if(this.connections.has(connection.profile.id))throw new PilotError('profile_already_connected');const call=connection.call;connection.call=(command,payload)=>this.execute(command,()=>{if(this.connections.get(connection.profile.id)!==connection)throw new PilotError('profile_disconnected');if(!connection.profile.mcpEnabled&&!['session.release','configuration.changed'].includes(command))throw new PilotError('mcp_access_disabled');return call(command,payload);});this.connections.set(connection.profile.id,connection);}
+  private interruptions=new Map<string,Session&{at:number;status:'interrupted';code:string;dispatch:'unknown';nextStep:'verify_outcome'}>();
+  private pruneInterruptions(){for(const [id,event] of this.interruptions)if(Date.now()-event.at>900000)this.interruptions.delete(id);while(this.interruptions.size>100)this.interruptions.delete(this.interruptions.keys().next().value!);}
+  register(connection:Connection){if(this.connections.has(connection.profile.id))throw new PilotError('profile_already_connected');const call=connection.call;connection.maintenanceCall=call;connection.call=(command,payload)=>this.execute(command,()=>{if(this.connections.get(connection.profile.id)!==connection)throw new PilotError('profile_disconnected');if(!connection.profile.mcpEnabled&&!['session.release','configuration.changed'].includes(command))throw new PilotError('mcp_access_disabled');return call(command,payload);});this.connections.set(connection.profile.id,connection);}
+  async maintenance(command:'update.prepare'|'update.seal'|'update.resume'|'update.activate'|'update.status',updateId?:string){
+    return Promise.all([...this.connections.values()].map(async connection=>{
+      const identity={id:connection.profile.id,managedProfile:connection.profile.managedProfile,nativeLifecycleVersion:connection.profile.nativeLifecycleVersion};
+      try{return {...await connection.maintenanceCall!(command,{updateId}),...identity};}
+      catch(error){return {...identity,ready:false,code:safeCode(error)};}
+    }));
+  }
   async invalidateAll(){this.runs.cancelAll();await Promise.allSettled([...this.connections.values()].map(c=>c.call('configuration.changed')));}
   update(profile:BrowserProfile){
     const connection=this.connections.get(profile.id);if(!connection)throw new PilotError('profile_disconnected');
@@ -79,8 +89,9 @@ export class BrokerRouter {
     connection.profile=profile;
     if(!profile.mcpEnabled)for(const s of [...this.sessions.values()])if(s.profileId===profile.id){this.sessions.delete(s.id);void connection.call('session.release',{sessionId:s.id}).catch(()=>{});}
   }
-  disconnect(profileId:string){this.runs.cancelProfile(profileId);this.files?.revokeProfile(profileId);this.connections.delete(profileId);for(const s of this.sessions.values())if(s.profileId===profileId)this.sessions.delete(s.id);}
+  disconnect(profileId:string){this.runs.cancelProfile(profileId);this.files?.revokeProfile(profileId);this.connections.delete(profileId);for(const s of this.sessions.values())if(s.profileId===profileId){this.interruptions.set(s.id,{...s,at:Date.now(),status:'interrupted',code:'profile_disconnected',dispatch:'unknown',nextStep:'verify_outcome'});this.sessions.delete(s.id);}this.pruneInterruptions();}
   async releaseOwner(owner:string){
+    for(const [id,event] of this.interruptions)if(event.owner===owner)this.interruptions.delete(id);
     this.runs.cancelOwner(owner);
     this.files?.revokeOwner(owner);
     const sessions=[...this.sessions.values()].filter(s=>s.owner===owner);for(const s of sessions)this.sessions.delete(s.id);
@@ -89,8 +100,10 @@ export class BrokerRouter {
   private connection(profileId:string){const c=this.connections.get(profileId);if(!c)throw new PilotError('profile_disconnected');if(!c.profile.mcpEnabled)throw new PilotError('mcp_access_disabled');return c;}
   async call(owner:string,tool:BrowserTool,input:unknown):Promise<any>{
     if(!Object.hasOwn(toolDefinitions,tool))throw new PilotError('unknown_tool');const p:any=toolDefinitions[tool].schema.parse(input);
+    this.pruneInterruptions();
+    if(tool==='browser_update_check')return this.updates?this.updates.check(p.refresh):{status:'unavailable',code:'update_checker_unavailable'};
     if(tool==='browser_profiles')return [...this.connections.values()].filter(c=>c.profile.mcpEnabled).map(c=>c.profile);
-    if(tool==='browser_sessions')return [...this.sessions.values()].filter(s=>s.owner===owner).map(({owner,...s})=>s);
+    if(tool==='browser_sessions')return [...this.sessions.values(),...this.interruptions.values()].filter(s=>s.owner===owner).map(({owner,...s})=>s);
     if(tool==='browser_run_status')return this.runs.status(owner,p.runId);
     if(tool==='browser_run_cancel')return this.runs.cancel(owner,p.runId);
     if(tool==='browser_tabs')return this.connection(p.profileId).call('tabs.list');
@@ -106,8 +119,11 @@ export class BrokerRouter {
         return {...result,profileId:p.profileId};
       }catch(error){this.sessions.delete(id);throw error;}
     }
+    const interruption=this.interruptions.get(p.sessionId);
+    if(interruption?.owner===owner){if(tool==='browser_diagnostics'){const {owner,...record}=interruption;return {interruption:record,events:[]};}throw new PilotError('session_interrupted',undefined,{blockers:[],phase:'connection',cause:'disconnected',dispatch:'unknown',nextStep:'verify_outcome'});}
     const s=this.sessions.get(p.sessionId);if(!s||s.owner!==owner)throw new PilotError('session_not_owned');
     const c=this.connection(s.profileId),{sessionId,...payload}=p;
+    if(tool==='browser_diagnostics')return c.call('v2.diagnostics',{sessionId});
     if(tool==='browser_capabilities'){
       const result=await c.call('v2.capabilities',{sessionId}),status=await c.call('status',{sessionId}),config=status.configs.find((item:any)=>item.provider===c.profile.activeProvider);
       return {...result,build:{host:status.build,extension:status.extensionBuild,compatible:status.build?.contractVersion===status.extensionBuild?.contractVersion,sameBuild:status.build?.fingerprint===status.extensionBuild?.fingerprint},capabilities:{...result.capabilities,vision:config?{...imageDecisionCapability(config),provider:config.provider,model:config.model}:{status:'external_agent',reason:'caller_supplies_vision'}}};

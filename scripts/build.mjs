@@ -1,6 +1,6 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
-import { createHash, generateKeyPairSync } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 process.chdir(root);
@@ -14,7 +14,8 @@ async function fingerprint(directory){
   }
 }
 await fingerprint('src');
-for(const file of ['package.json','package-lock.json','scripts/build.mjs','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
+await fingerprint('scripts/distribution');
+for(const file of ['package.json','package-lock.json','scripts/build.mjs','scripts/cli.mjs','scripts/state-directory.mjs','scripts/setup-lib.mjs','scripts/browser.mjs','release-trust.json','extension-key.txt','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
 const buildInfo={version,fingerprint:hash.digest('hex'),contractVersion:2};
 const define={__TABORA_BUILD__:JSON.stringify(buildInfo)};
 await mkdir('dist/extension', { recursive: true });
@@ -23,8 +24,7 @@ let key;
 try { key = (await readFile('extension-key.txt', 'utf8')).trim(); }
 catch (e) {
   if (e.code !== 'ENOENT') throw e;
-  key = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({type:'spki',format:'der'}).toString('base64');
-  await writeFile('extension-key.txt', key + '\n');
+  throw new Error('Missing canonical extension-key.txt. Refusing to generate a different extension identity.');
 }
 const extensionId = [...createHash('sha256').update(Buffer.from(key, 'base64')).digest().subarray(0, 16)].map(b=>String.fromCharCode(97+(b>>4),97+(b&15))).join('');
 await writeFile('extension-id.txt', extensionId + '\n');
@@ -46,7 +46,7 @@ await writeFile('dist/extension/manifest.json', JSON.stringify({
 }, null, 2));
 await build({ define, entryPoints: ['src/extension/background.ts','src/extension/panel.ts'], outdir:'dist/extension', bundle:true, format:'esm', platform:'browser', target:'chrome116', sourcemap:true });
 await build({entryPoints:['src/extension/sensor.ts'],outdir:'dist/extension',bundle:true,format:'iife',platform:'browser',target:'chrome116',sourcemap:true});
-await build({ define, entryPoints: ['src/host/main.ts','src/host/broker.ts','src/host/mcp.ts','src/host/provider-worker.ts','src/host/document-worker.ts'], outdir:'dist/host', bundle:true, packages:'external', format:'esm', platform:'node', target:'node22', sourcemap:true });
+await build({ define, entryPoints: ['src/host/main.ts','src/host/broker.ts','src/host/mcp.ts','src/host/provider-worker.ts','src/host/document-worker.ts','src/host/update-worker.ts'], outdir:'dist/host', bundle:true, packages:'external', format:'esm', platform:'node', target:'node22', sourcemap:true });
 await writeFile('dist/build-info.json',JSON.stringify(buildInfo,null,2)+'\n');
 for (const file of ['panel.html','panel.css','icon.png']) await copyFile('src/extension/'+file,'dist/extension/'+file);
 await copyFile('scripts/dpapi.ps1','dist/host/dpapi.ps1');

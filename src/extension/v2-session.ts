@@ -1,14 +1,18 @@
 import {z} from 'zod';
 import {actionSchema,outcomePredicate,dialogSchema,type ExpectedDialog,type OutcomePredicate,type BrowserAction,type ObservationV2,type TargetV2} from '../capabilities.js';
-import {PilotError,exactOrigin,type Binding,type BrowserProfile} from '../shared.js';
+import {PilotError,safeCode,safeErrorDetails,actionDiagnosticSchema,exactOrigin,type Binding,type BrowserProfile} from '../shared.js';
+import {DiagnosticBuffer} from '../diagnostic-buffer.js';
 import {enforceRecipe} from './policy.js';
 import {withInteractiveTab,waitForTab} from './readiness.js';
 import {nativeInput} from './input-backend.js';
 import {captureRegion} from './capture.js';
 import {downloadLink} from './download.js';
 import {imageSize} from '../image-size.js';
+import {frameAccess} from './frame-access.js';
 
 export function createCapabilitySession(id:string,getBinding:()=>Binding|undefined,getPolicy:()=>Pick<BrowserProfile,'mode'|'vaultEnabled'>,validateTab:(tabId:number)=>Promise<void>,getGeneration:()=>number,allowedOrigins:()=>string[],rebind:(tabId:number)=>Promise<Binding>,siteToolsEnabled:()=>boolean,credentialUse?:(credentialId:string,binding:Binding)=>Promise<{username:string;password:string}>){
+  const diagnostics=new DiagnosticBuffer();
+  async function preparedRead<T>(read:()=>Promise<T>){const b=binding(),run=getGeneration();return withInteractiveTab(b.tabId,async()=>{await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');},read);}
   const loaded=new Set<string>(),snapshots=new Map<string,{frameId:number;documentId:string;origin:string;snapshotId:string;documentToken:string;targets:TargetV2[]}>();
   const loadedTokens=new Map<string,string>();
   let pending:{id:string;stateVersion:string;frameId:number;action:BrowserAction;expires:number;expect?:OutcomePredicate;timeoutMs:number;dialog?:ExpectedDialog;visual?:{point:{x:number;y:number};rect:string}}|undefined;
@@ -17,23 +21,23 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
   let handoff:{tabId:number;origin:string;reason:string}|undefined;
   let humanProgress:{reason:string;origin:string;tabId:number}|undefined;
   function dispose(){const b=getBinding();if(!b)return;for(const [documentId,documentToken] of loadedTokens){
-    void chrome.scripting.executeScript({target:{tabId:b.tabId,documentIds:[documentId]},world:'ISOLATED',func:async(sessionId,documentToken)=>{const operation=(globalThis as any).__taboraOperation;if(operation)await operation({op:'cancel',sessionId,documentToken,origin:location.origin});},args:[id,documentToken]}).catch(()=>{});
+    void chrome.scripting.executeScript({target:{tabId:b.tabId,documentIds:[documentId]},world:'ISOLATED',func:async(sessionId,documentToken)=>{const operation=(globalThis as any).__taboraOperation;if(operation)await operation({op:'cancel',sessionId,documentToken,origin:globalThis.origin});},args:[id,documentToken]}).catch(()=>{});
     }
     loadedTokens.clear();
   }
   const binding=()=>{const b=getBinding();if(!b)throw new PilotError('no_bound_tab');return {...b};};
-  async function frames(){
+  async function frames(frameId?:number){
     const b=binding(),run=getGeneration();await validateTab(b.tabId);
     const all=await chrome.webNavigation.getAllFrames({tabId:b.tabId});if(run!==getGeneration())throw new PilotError('cancelled');
     if((all?.length??0)>64)throw new PilotError('observation_scope_limit');
-    return Promise.all((all??[]).slice(0,64).map(async frame=>{
-      let origin:string|undefined;try{origin=exactOrigin(frame.url);}catch{}
-      const inTask=origin===b.origin||!!origin&&allowedOrigins().includes(origin),permitted=!!origin&&inTask&&await chrome.permissions.contains({origins:[origin+'/*']});
-      return {frameId:frame.frameId,documentId:frame.documentId,parentFrameId:frame.parentFrameId,origin,allowed:permitted,reason:permitted?undefined:inTask?'site_permission_required':'frame_origin_not_granted'};
+    return Promise.all((all??[]).filter(frame=>frameId===undefined||frame.frameId===frameId).map(async frame=>{
+      const result=await frameAccess(b.tabId,frame,[b.origin,...allowedOrigins()]);
+      if(run!==getGeneration())throw new PilotError('cancelled');
+      return result;
     }));
   }
   async function liveFrame(frameId=0){
-    const b=binding(),frame=(await frames()).find(f=>f.frameId===frameId);
+    const b=binding(),frame=(await frames(frameId)).find(f=>f.frameId===frameId);
     if(!frame?.allowed||!frame.origin)throw new PilotError('frame_not_permitted');
     if(frameId===0&&frame.documentId!==b.documentId)throw new PilotError('stale_binding');
     return {...frame,origin:frame.origin,tabId:b.tabId};
@@ -50,7 +54,7 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
       if(!operation)return {ok:false,code:'sensor_unavailable'};return operation(input);
     },args:[{...input,origin:frame.origin,sessionId:id,allowedOrigins:[binding().origin,...allowedOrigins()]}]});
     if(run!==getGeneration())throw new PilotError('cancelled');
-    const data=result[0]?.result;if(!data?.ok)throw new PilotError(data?.code??'execution_failed');const token=data.snapshot?.provenance?.documentToken??data.documentToken??data.provenance?.documentToken;if(typeof token==='string'){loadedTokens.set(frame.documentId,token);if(loadedTokens.size>64)loadedTokens.delete(loadedTokens.keys().next().value!);}return data;
+    const data=result[0]?.result;if(!data?.ok){const details=actionDiagnosticSchema.safeParse(data?.details);throw new PilotError(data?.code??'execution_failed',undefined,details.success?details.data:undefined);}const token=data.snapshot?.provenance?.documentToken??data.documentToken??data.provenance?.documentToken;if(typeof token==='string'){loadedTokens.set(frame.documentId,token);if(loadedTokens.size>64)loadedTokens.delete(loadedTokens.keys().next().value!);}return data;
   }
   async function state(input:{frameId:number;cursor:number;limit:number;baseSnapshotId?:string}){
     const frame=await liveFrame(input.frameId),result=await sensor(input.frameId,{op:'observe',...input});
@@ -74,7 +78,7 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
       const nonce=crypto.randomUUID();await sensor(parent.frameId,{op:'frame_arm',nonce});await sensor(current.frameId,{op:'frame_send',nonce});
       // postMessage delivery occurs after the child operation's script task.
       const {geometry}=await sensor(parent.frameId,{op:'frame_geometry',nonce});
-      if(result.x<0||result.x>geometry.width||result.y<0||result.y>geometry.height)throw new PilotError('target_obscured');
+      if(result.x<0||result.x>geometry.width||result.y<0||result.y>geometry.height)throw new PilotError('target_obscured',undefined,{blockers:[],cause:'outside_viewport',phase:'actionability',dispatch:'not_sent',frameId,nextStep:'observe'});
       result={x:geometry.x+result.x*geometry.sx,y:geometry.y+result.y*geometry.sy};current=parent;
     }
     if(current?.frameId!==0)throw new PilotError('frame_limit');return result;
@@ -115,19 +119,24 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
       if(!current.targets.some(target=>target.id===input.targetId)||(input.redactTargets??[]).some((id:string)=>!current.targets.some(target=>target.id===id)))throw new PilotError('unobserved_target');
       if(!await chrome.permissions.contains({permissions:['debugger']}))throw new PilotError('native_input_permission_required');
       return withInteractiveTab(b.tabId,async()=>{await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');},async()=>{
-        try{
+        for(let attempt=0;;attempt++)try{
           const region=await sensor(0,{op:'capture_mask',snapshotId:current.snapshotId,targetId:input.targetId,redactTargets:input.redactTargets});
           const data=await captureRegion(b.tabId,region.clip,async()=>{await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');await liveFrame(0);await sensor(0,{op:'capture_validate'});});
           const header=atob(data.slice(0,44)),size=imageSize(Uint8Array.from(header,character=>character.charCodeAt(0)));
           capture={id:crypto.randomUUID(),data,expires:Date.now()+60000};visualGrant={id:capture.id,targetId:input.targetId,documentId:b.documentId,snapshotId:current.snapshotId,...size,region,expires:capture.expires};
           return {captureId:capture.id,base64Length:data.length,visual:{captureId:capture.id,...size,expiresAt:capture.expires},provenance:region.provenance,pixelRedaction:region.pixelRedaction,redactedRegions:region.redactedRegions};
+        }catch(error){
+          // Renderer activation can settle after mask preparation. Discard the
+          // failed image and recompute masks once within the same document/lease.
+          if(attempt!==0||!(error instanceof PilotError)||error.code!=='capture_redaction_changed')throw error;
         }finally{await sensor(0,{op:'capture_clear'}).catch(()=>{});}
-      });
+      },15000,true);
     }
     if(name==='capabilities'){const extended=await chrome.permissions.contains({permissions:['debugger']});return {schemaVersion:2,capabilities:{semantic:{status:'available'},shadow:{status:'available'},frames:{status:'available'},reader:{status:'available'},controls:{status:'available'},delta:{status:'available'},nativeInput:{status:extended?'available':'permission_required'},capture:{status:extended?'available':'permission_required'},vision:{status:'unsupported',reason:'decision_adapters_text_only'},webmcp:{status:siteToolsEnabled()?'experimental':'unsupported',reason:siteToolsEnabled()?'native_runtime_discovery_required':'webmcp_not_enabled'}}};}
     if(name==='frames')return {schemaVersion:2,frames:await frames(),allowedOrigins:[binding().origin,...allowedOrigins()]};
-    if(name==='state'){enforceRecipe(getPolicy(),'extract');return state(input);}
-    if(name==='read'){enforceRecipe(getPolicy(),'extract');return sensor(input.frameId,{op:'read',read:input});}
+    if(name==='diagnostics')return {...diagnostics.snapshot(),retentionMs:900000,limit:100,maxBytes:128000};
+    if(name==='state'){enforceRecipe(getPolicy(),'extract');return preparedRead(()=>state(input));}
+    if(name==='read'){enforceRecipe(getPolicy(),'extract');return preparedRead(()=>sensor(input.frameId,{op:'read',read:input}));}
     if(name==='plan'){
       const action=actionSchema.parse(input.action);enforceRecipe(getPolicy(),['scroll','navigate'].includes(action.type)?'extract':'fill');const current=snapshots.get(String(input.frameId)),frame=await liveFrame(input.frameId);
       if(!current||current.documentId!==frame.documentId||input.stateVersion!==frame.documentId+':'+current.snapshotId)throw new PilotError('stale_snapshot');
@@ -151,7 +160,7 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
       const current=snapshots.get(String(plan.frameId));if(!current||plan.stateVersion!==current.documentId+':'+current.snapshotId)throw new PilotError('stale_snapshot');
       const b=binding(),run=getGeneration();
       return withInteractiveTab(b.tabId,async()=>{enforceRecipe(getPolicy(),recipe);await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');},async()=>{
-        const start=performance.now();let result:any,nativePrepareMs=0,inputMs=0;
+        const start=performance.now();let result:any,nativePrepareMs=0,inputMs=0;try{
         const native=['click','fill'].includes(plan.action.type)&&(plan.action as any).backend==='native'||['image_click','key','hover','drag'].includes(plan.action.type)||plan.action.type==='check'&&current.targets.find(t=>t.id===plan.action.targetId)?.inputType===undefined;
         if(native){
           if(!await chrome.permissions.contains({permissions:['debugger']}))throw new PilotError('native_input_permission_required');
@@ -206,9 +215,22 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
         }
         if(!observed)return {action:result,readiness:{state:'navigation_pending',businessOutcomeVerified:false}};
         return {action:result,...observed,readiness:{state:plan.expect?(verified?'verified':'timeout'):'observed',businessOutcomeVerified:verified},timings:{totalMs:Math.round(performance.now()-start),nativePrepareMs:Math.round(nativePrepareMs),inputMs:Math.round(inputMs),readinessMs:Math.round(readinessMs),observationMs:Math.round(performance.now()-observing)}};
+        }catch(error){
+          if(result?.dispatch&&result.dispatch!=='not_needed')throw new PilotError('action_outcome_unknown',undefined,{blockers:[],...safeErrorDetails(error),phase:'verify',dispatch:result.dispatch==='sent'?'sent':'unknown',nextStep:'verify_outcome'});
+          throw error;
+        }
       });
     }
     throw new PilotError('unknown_command');
   }
-  return {command,isHandedOff:()=>handoff!==undefined,async validateImages(images:{captureId:string;targetId:string;stateVersion:string;expiresAt:number}[]){const current=snapshots.get('0'),grant=visualGrant;for(const image of images)if(!current||!grant||grant.id!==image.captureId||grant.targetId!==image.targetId||grant.expires!==image.expiresAt||grant.expires<Date.now()||image.stateVersion!==current.documentId+':'+current.snapshotId||grant.documentId!==(await liveFrame(0)).documentId)throw new PilotError('stale_capture');},async fileTarget(version:string,targetId:string){const current=snapshots.get('0');if(!current||version!==current.documentId+':'+current.snapshotId||current.documentId!==(await liveFrame(0)).documentId)throw new PilotError('stale_snapshot');const target=current.targets.find(target=>target.id===targetId);if(target?.kind!=='file')throw new PilotError('stale_snapshot');return {target,token:current.documentToken};},async validateVersion(version:string){const current=[...snapshots.values()].find(snapshot=>version===snapshot.documentId+':'+snapshot.snapshotId);if(!current)return false;const live=await liveFrame(current.frameId);return live.documentId===current.documentId;},invalidate(){dispose();pending=undefined;capture=undefined;visualGrant=undefined;snapshots.clear();loaded.clear();}};
+  async function diagnosedCommand(name:string,input:any){
+    const traceId=crypto.randomUUID(),started=performance.now();
+    try{const result=await command(name,input);if(result?.backgroundReadiness?.rendered===false)diagnostics.add('background_render_stalled',{blockers:[],traceId,phase:'render',cause:'render_timeout',dispatch:result.action?.dispatch==='sent'?'sent':'not_sent',nextStep:result.action?'verify_outcome':'retry_read'});return result;}
+    catch(error){
+      const code=safeCode(error),details=safeErrorDetails(error);
+      if(error instanceof PilotError&&details){error.details={...details,traceId,elapsedMs:Math.round(performance.now()-started)};diagnostics.add(code,error.details);}
+      throw error;
+    }
+  }
+  return {command:diagnosedCommand,async observedTarget(targetId:string){const current=snapshots.get('0');if(!current||current.documentId!==(await liveFrame(0)).documentId)return undefined;return current.targets.find(target=>target.id===targetId);},isHandedOff:()=>handoff!==undefined,async validateImages(images:{captureId:string;targetId:string;stateVersion:string;expiresAt:number}[]){const current=snapshots.get('0'),grant=visualGrant;for(const image of images)if(!current||!grant||grant.id!==image.captureId||grant.targetId!==image.targetId||grant.expires!==image.expiresAt||grant.expires<Date.now()||image.stateVersion!==current.documentId+':'+current.snapshotId||grant.documentId!==(await liveFrame(0)).documentId)throw new PilotError('stale_capture');},async fileTarget(version:string,targetId:string){const current=snapshots.get('0');if(!current||version!==current.documentId+':'+current.snapshotId||current.documentId!==(await liveFrame(0)).documentId)throw new PilotError('stale_snapshot');const target=current.targets.find(target=>target.id===targetId);if(target?.kind!=='file')throw new PilotError('stale_snapshot');return {target,token:current.documentToken};},async validateVersion(version:string){const current=[...snapshots.values()].find(snapshot=>version===snapshot.documentId+':'+snapshot.snapshotId);if(!current)return false;const live=await liveFrame(current.frameId);return live.documentId===current.documentId;},invalidate(){dispose();pending=undefined;capture=undefined;visualGrant=undefined;snapshots.clear();loaded.clear();}};
 }

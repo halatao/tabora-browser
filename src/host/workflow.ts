@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {workflowSchema} from '../browser-api.js';
-import {PilotError,requestSchema,safeCode,type DecisionResult} from '../shared.js';
+import {PilotError,requestSchema,safeCode,safeErrorDetails,type DecisionResult} from '../shared.js';
 import type {BrowserAction,ObservationV2,TargetV2} from '../capabilities.js';
 import type {RunStatus} from './run-controller.js';
 import {decimalAggregate} from '../decimal.js';
@@ -16,6 +16,7 @@ function extractText(text:string,prefix?:string){if(!prefix)return text;const li
 export {workflowChoices} from './candidate-service.js';
 import {workflowChoices} from './candidate-service.js';
 import {observeScope} from './observation-service.js';
+import {overlayRecovery} from './overlay-recovery.js';
 /** Providers choose IDs; this controller alone turns validated choices into extension plans. */
 export async function executeWorkflow(status:RunStatus,goal:string,suppliedWorkflow:z.infer<typeof workflowSchema>|undefined,readonly:boolean,maxSteps:number,call:Call,redact:(value:any)=>any){
   const raw=suppliedWorkflow?undefined:new GoalPlan(goal);
@@ -159,7 +160,7 @@ export async function executeWorkflow(status:RunStatus,goal:string,suppliedWorkf
     }
     const priority=(operation:any)=>{const target=operation.snapshot.targets.find((target:TargetV2)=>target.id===(operation.action?.targetId??operation.read?.targetId));if(['fill','replace','select','check','drag'].includes(operation.action?.type))return 0;if(workflow.reads.some(read=>read.name===target?.name))return 1;if(target?.name&&goal.toLocaleLowerCase().includes(target.name.toLocaleLowerCase()))return 2;if(operation.action?.type==='click'||operation.action?.type==='navigate')return 3;if(operation.read)return 4;return 5;};
     const sourceLinks=new Set([...workflow.documents,...workflow.derivedValues.map(value=>value.source).filter(isDocument),...workflow.attachments.flatMap(value=>value.document?[value.document]:[]),...(workflow.answer&&isDocument(workflow.answer)?[workflow.answer]:[])].flatMap(source=>source.link?[source.link]:[]).concat(workflow.downloads.map(source=>source.link)));
-    const operations=(raw&&!raw.retrieval?raw.operations(observations,readonly):observations.flatMap(({frameId,state})=>workflowChoices(state.snapshot,effective,readonly).map(operation=>({...operation,frameId,stateVersion:state.stateVersion,snapshot:state.snapshot as ObservationV2})))).filter(operation=>{
+    const operations=(raw&&!raw.retrieval?raw.operations(observations,readonly):observations.flatMap(({frameId,state})=>workflowChoices(state.snapshot,effective,readonly,state.backgroundReadiness?.rendered).map(operation=>({...operation,frameId,stateVersion:state.stateVersion,snapshot:state.snapshot as ObservationV2})))).filter(operation=>{
       const target=operation.snapshot.targets.find(target=>target.id===operation.action?.targetId);
       if(raw?.retrieval&&operation.action&&!['scroll','navigate'].includes(operation.action.type))return false;
       if(raw?.retrieval&&operation.action?.type==='navigate'&&target&&!target.name.toLowerCase().split(/\W+/).some(word=>word.length>3&&goal.toLowerCase().includes(word)))return false;
@@ -172,6 +173,8 @@ export async function executeWorkflow(status:RunStatus,goal:string,suppliedWorkf
     }
     idleObservations=0;
     if(lastRead?.nextOffset!==null&&lastRead?.nextOffset!==undefined&&lastRead?.provenance?.targetId){const observation=observations.find(item=>item.state.snapshot.provenance.documentToken===lastRead.provenance.documentToken);if(observation)operations.unshift({description:'Continue the previous exact reader using its revision and returned offset',read:{...lastRead.request,offset:lastRead.nextOffset},frameId:observation.frameId,stateVersion:observation.state.stateVersion,snapshot:observation.state.snapshot});}
+    const lastFailure=[...status.trace].reverse().find(trace=>trace.code==='target_obscured'||trace.code==='modal_blocked');
+    if(!readonly&&!uncertain&&lastFailure&&status.trace.length-lastFailure.step<2)operations.unshift(...overlayRecovery(observations,lastFailure.details));
     const resolvedAttachments:{field:string;section?:string;origin?:string;artifactIds:string[]}[]=[];
     for(const [index,source] of workflow.attachments.entries()){
       if(source.files&&!fileArtifacts.has(index)){const files=[];for(const file of source.files)files.push(await call('workflow.file',file));fileArtifacts.set(index,files);acquiredSource=true;}
@@ -195,7 +198,7 @@ export async function executeWorkflow(status:RunStatus,goal:string,suppliedWorkf
     const choices=[...goalFacts.map((fact,index)=>({id:'finish_'+index,description:`Return observed answer ${JSON.stringify(fact.value)}. ${fact.evidence.description}`.slice(0,300)})),...operations.map((operation,index)=>({id:'op_'+index,description:operation.description+` [frame ${operation.frameId}]`})),...uploads.map(({id,description})=>({id,description})),...documents.map(({id,description})=>({id,description})),...downloads.map(({id,description})=>({id,description})),...popups.map(({id,description}:any)=>({id,description})),...sites.map(({id,description})=>({id,description})),...logins.map(({id,description})=>({id,description})),{id:'handoff',description:'None of the offered ready actions can advance the remaining task. Return a specific unsupported or missing-information result; do not invent a credential requirement.'},...(inspections<3||raw?[{id:'inspect',description:'Wait briefly for a pending website update; do not choose when a task-authorized field or file action is ready.'}]:[])];
     if(choices.length<2){await call('v2.handoff',{reason:'unsupported_control'});status.status='needs_input';status.code='needs_user';return;}
     for(const choice of choices)choice.description=choice.description.slice(0,300);
-    const context={schemaVersion:2,taskProgress:{originalGoal:goal,terminal:raw?.progress()??workflow.success??workflow.answer??workflow.finish,humanProgress:observed.humanProgress,scopedCredentialFills:filledLogins.size,pendingAttachments:uploads.map(({description})=>description),attachmentsDispatched:attached.size,derivedValuesResolved:derived.size,documentsAcquired:documentArtifacts.size},page:{...snapshot,targets:snapshot.targets.map(({options,...target})=>target)},frames:observations.map(({frameId,state})=>({frameId,origin:state.binding.origin,targets:state.snapshot.targets.map((target:any)=>({id:target.id,name:target.name,kind:target.kind,section:target.section,shadowRootPath:target.shadowRootPath}))})),lastRead,history:status.trace.slice(-4).map(t=>({choiceId:t.choiceId,targetName:t.targetName,code:t.code}))};
+    const context={schemaVersion:2,taskProgress:{originalGoal:goal,terminal:raw?.progress()??workflow.success??workflow.answer??workflow.finish,humanProgress:observed.humanProgress,scopedCredentialFills:filledLogins.size,pendingAttachments:uploads.map(({description})=>description),attachmentsDispatched:attached.size,derivedValuesResolved:derived.size,documentsAcquired:documentArtifacts.size},page:{...snapshot,backgroundReadiness:observed.backgroundReadiness,targets:snapshot.targets.map(({options,...target})=>target)},frames:observations.map(({frameId,state})=>({frameId,origin:state.binding.origin,targets:state.snapshot.targets.map((target:any)=>({id:target.id,name:target.name,kind:target.kind,section:target.section,shadowRootPath:target.shadowRootPath}))})),lastRead,history:status.trace.slice(-4).map(t=>({choiceId:t.choiceId,targetName:t.targetName,code:t.code,details:t.details}))};
     while(JSON.stringify(context).length>23000&&context.page.targets.length)context.page.targets.pop();while(JSON.stringify(context).length>23000&&context.frames.length)context.frames.pop();
     if(JSON.stringify(context).length>23000)context.lastRead={truncated:true,reason:'context_budget'};
     const resumeGuidance=observed.humanProgress?.status==='control_returned'?'Human returned control. Continue the remaining authorized task from this fresh page toward the taskProgress.terminal predicate. The originalGoal in taskProgress records earlier steps, not new blockers. ':'';
@@ -264,7 +267,7 @@ export async function executeWorkflow(status:RunStatus,goal:string,suppliedWorkf
         }
         lastRead=undefined;
       }
-    }catch(error){trace.code=safeCode(error);if(!['stale_reference','stale_snapshot','target_moved','target_not_ready','target_obscured','no_bound_tab'].includes(trace.code))throw error;}
+    }catch(error){trace.code=safeCode(error);trace.details=redact(safeErrorDetails(error));if(trace.details?.dispatch==='unknown'||trace.details?.dispatch==='sent')throw new PilotError('action_outcome_unknown');if(!['stale_reference','stale_snapshot','target_moved','target_not_ready','target_obscured','modal_blocked','background_render_timeout','no_bound_tab'].includes(trace.code))throw error;}
     finally{trace.operationMs=Math.round(performance.now()-start);}
   }
   throw new PilotError('step_limit');

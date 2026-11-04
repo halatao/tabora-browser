@@ -2,7 +2,7 @@ import {PilotError} from '../shared.js';
 import type {z} from 'zod';
 import type {workflowSchema} from '../browser-api.js';
 import type {BrowserAction,ObservationV2} from '../capabilities.js';
-export function workflowChoices(snapshot:ObservationV2,workflow:z.infer<typeof workflowSchema>,readonly:boolean){
+export function workflowChoices(snapshot:ObservationV2,workflow:z.infer<typeof workflowSchema>,readonly:boolean,rendered?:boolean){
   const operations:{description:string;action?:BrowserAction;read?:{targetId:string;format:string;offset:number;limit:number;row?:number;column?:number;operation?:string;decimal?:string;group?:string}}[]=[];
   for(const target of snapshot.targets){
     if(!target.visible||target.disabled||target.secret)continue;
@@ -26,14 +26,14 @@ export function workflowChoices(snapshot:ObservationV2,workflow:z.infer<typeof w
       if(Array.isArray(source.value)&&target.kind==='listbox'&&target.multiple){const wanted=source.value,matches=wanted.map(label=>target.options?.filter(option=>option.label===label&&!option.disabled)??[]);if(matches.every(options=>options.length===1)&&new Set(wanted).size===wanted.length){const indices=matches.map(options=>options[0].index),selected=target.options?.filter(option=>option.selected).map(option=>option.index)??[];if(indices.slice().sort().join()!==selected.sort().join())action={type:'select',targetId:target.id,indices};}}
       if(action)operations.push({description:`Set ${target.name} to task-supplied ${JSON.stringify(source.value)}`.slice(0,300),action});
     }
-    if(!(target.submitter&&target.formValid===false)&&(target.clickable||['button','link','menuitem','tab','option','treeitem'].includes(target.kind)||['combobox','listbox'].includes(target.kind)&&!target.options))operations.push({description:`Activate ${target.kind}: ${target.name}${target.section?' in '+target.section:''}`.slice(0,300),action:{type:'click',targetId:target.id,backend:workflow.nativeInput?'native':'dom'}});
+    if((!workflow.nativeInput||rendered!==false)&&!(target.submitter&&target.formValid===false)&&(target.clickable||['button','link','menuitem','tab','option','treeitem'].includes(target.kind)||['combobox','listbox'].includes(target.kind)&&!target.options))operations.push({description:`Activate ${target.kind}: ${target.name}${target.section?' in '+target.section:''}`.slice(0,300),action:{type:'click',targetId:target.id,backend:workflow.nativeInput?'native':'dom'}});
     if(workflow.nativeInput&&['button','menuitem','treeitem','combobox'].includes(target.kind)){
-      operations.push({description:`Hover ${target.kind}: ${target.name}`,action:{type:'hover',targetId:target.id}});
+      if(rendered!==false)operations.push({description:`Hover ${target.kind}: ${target.name}`,action:{type:'hover',targetId:target.id}});
       if(!(target.submitter&&target.formValid===false))operations.push({description:`Focus ${target.kind}: ${target.name} and press Enter`,action:{type:'key',targetId:target.id,key:'Enter',shift:false}});
       if(target.expanded!==undefined)operations.push({description:`Focus ${target.name} and press Escape`,action:{type:'key',targetId:target.id,key:'Escape',shift:false}});
     }
   }
   for(const read of workflow.reads??[]){const targets=snapshot.targets.filter(target=>target.name===read.name&&(!read.section||target.section===read.section)&&(!read.origin||snapshot.origin===read.origin));if(targets.length===1){const {name,section,origin,...parameters}=read;operations.unshift({description:`Read task-requested ${read.format}: ${name}`,read:{...parameters,targetId:targets[0].id,offset:0,limit:16000}});}}
-  if(!readonly&&workflow.nativeInput)for(const drag of workflow.drags??[]){const find=(spec:typeof drag.source)=>snapshot.targets.filter(target=>target.name===spec.name&&(!spec.section||target.section===spec.section)&&(!spec.origin||snapshot.origin===spec.origin)&&target.visible&&!target.disabled&&!target.secret),source=find(drag.source),destination=find(drag.destination);if(source.length===1&&destination.length===1)operations.unshift({description:`Drag ${source[0].name} to task-requested ${destination[0].name}`,action:{type:'drag',targetId:source[0].id,destinationId:destination[0].id}});}
+  if(!readonly&&workflow.nativeInput&&rendered!==false)for(const drag of workflow.drags??[]){const find=(spec:typeof drag.source)=>snapshot.targets.filter(target=>target.name===spec.name&&(!spec.section||target.section===spec.section)&&(!spec.origin||snapshot.origin===spec.origin)&&target.visible&&!target.disabled&&!target.secret),source=find(drag.source),destination=find(drag.destination);if(source.length===1&&destination.length===1)operations.unshift({description:`Drag ${source[0].name} to task-requested ${destination[0].name}`,action:{type:'drag',targetId:source[0].id,destinationId:destination[0].id}});}
   return operations;
 }

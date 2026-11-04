@@ -12,16 +12,21 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
     const truncation={rows:(result.totalRows??rows.length)>maximum||result.nextOffset!==null,columns:rows.some(row=>row.length>30),cells:rows.some(row=>row.slice(0,30).some(cell=>cell.length>120))};
     return {ok:true,rows:rows.slice(0,maximum).map(row=>row.slice(0,30).map(cell=>cell.slice(0,120))),truncation,truncated:!result.complete||Object.values(truncation).some(Boolean),rowCount:result.totalRows??rows.length};
   }
-  async function observe(kind:string){
+  async function observe(kind:string,focusId?:string,expected?:TargetV2){
     state=await call('state',{frameId:0,cursor:0,limit:100});const targets:TargetV2[]=[...state.snapshot.targets];
     for(let page=1;state.snapshot.coverage.nextCursor!==null&&page<10;page++){state=await call('state',{frameId:0,cursor:state.snapshot.coverage.nextCursor,limit:100});targets.push(...state.snapshot.targets);}
     versions.clear();versions.set(state.snapshot.snapshotId,targets);
+    if(expected){
+      const fresh=targets.find(target=>target.id===expected.id);
+      const identity=(target:TargetV2)=>JSON.stringify([target.kind,target.name,target.href,target.secret,target.inputType,target.inputPurpose,target.formId]);
+      if(!fresh||identity(fresh)!==identity(expected))throw new PilotError('stale_snapshot');
+    }
     const result:PageTarget[]=[];
     for(const target of targets){
       let projected:PageTarget|undefined;
       if(target.kind==='form'&&(kind!=='login'||targets.some(t=>t.formId===target.id&&t.secret&&t.inputPurpose!=='one-time-code')))projected={id:target.id,kind:'form',name:target.name,fields:targets.filter(t=>t.formId===target.id&&['textbox','combobox','spinbutton'].includes(t.kind)).map(t=>t.name),contains:targets.filter(t=>t.formId===target.id&&t.kind==='button').map(t=>t.name)};
       else if(target.kind==='combobox'&&target.options)projected={id:target.id,kind:'select',name:target.name,options:target.options.map(o=>({...o,placeholder:!o.label})),disabled:target.disabled};
-      else if(['link','button'].includes(target.kind))projected={id:target.id,kind:target.kind as 'link'|'button',name:target.name,href:target.href?new URL(target.href).pathname+new URL(target.href).search:undefined,contains:target.contains,containsTruncated:target.containsTruncated,expanded:target.expanded};
+      else if(['link','button','tab'].includes(target.kind)||target.clickable)projected={id:target.id,kind:target.kind==='link'?'link':'button',name:target.name,href:target.href?new URL(target.href).pathname+new URL(target.href).search:undefined,contains:target.contains,containsTruncated:target.containsTruncated,expanded:target.expanded};
       else if(['table','grid'].includes(target.kind)){const read=await table(target.id,6);projected={id:target.id,kind:'table',name:read.rows[0]?.join(' | ')??target.name,preview:read.rows,previewTruncated:read.truncated,section:target.section};}
       else if(target.kind==='file')projected={id:target.id,kind:'file',name:target.name,accept:target.accept,multiple:target.multiple};
       else if(target.name==='Page body')projected={id:target.id,kind:'text',name:'Obsah stránky'};
@@ -29,6 +34,7 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
     }
     // Legacy recipe menus place the whole-page reader after concrete targets.
     result.sort((a,b)=>Number(a.kind==='text')-Number(b.kind==='text'));
+    if(focusId){const index=result.findIndex(target=>target.id===focusId);if(index<0)throw new PilotError('wrong_target_kind');result.unshift(...result.splice(index,1));}
     const body=targets.find(t=>t.name==='Page body');const text=body?(await call('read',{frameId:0,targetId:body.id,format:'text',offset:0,limit:3200})).text:'';
     const snapshot:Snapshot={origin:state.snapshot.origin,path:state.snapshot.path,title:state.snapshot.title,documentToken:state.snapshot.snapshotId,pageVersion:state.snapshot.dataVersion,dataVersion:state.snapshot.dataVersion,text,targets:result.slice(0,48),truncated:state.snapshot.coverage.truncated||result.length>48};
     return {ok:true,snapshot,limitations:{limit:48,truncated:snapshot.truncated}};
@@ -41,7 +47,7 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
     if(result.action?.dispatch==='unknown'||result.action?.outcome==='unknown'||result.action?.outcome==='failed')throw new PilotError('action_outcome_unknown');
     state=result.snapshot?result:await call('state',{frameId:0,cursor:0,limit:100});return result;
   }
-  return {async operation(input:RecipeInput):Promise<any>{
+  return {observeForTarget:observe,async operation(input:RecipeInput):Promise<any>{
     if(input.op==='cancel'){state=undefined;versions.clear();return {ok:true};}
     if(input.op==='observe')return observe(input.kind);
     if(input.op==='wait'){

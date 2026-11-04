@@ -1,5 +1,5 @@
 import type {ObservationV2,TargetV2} from '../capabilities.js';
-import {ancestor,accessibleName,content,role,composedElements} from './semantic.js';
+import {ancestor,accessibleName,content,role,composedElements,PAGE_SCAN_LIMIT} from './semantic.js';
 import type {RecordCollection} from '../record-collection.js';
 import {ownedCombobox} from './widgets.js';
 export type RegistryEntry={el:Element;fingerprint:string;target:TargetV2};
@@ -24,7 +24,7 @@ export class Registry{
     if(fresh){this.scanCache=undefined;this.metadata=new WeakMap();}
     for(const [root,observer] of this.observers){if(!root.isConnected){observer.disconnect();this.observers.delete(root);this.roots.delete(root);}else this.changed(observer.takeRecords());}
     const now=performance.now(),hit=this.scanCache?.epoch===this.treeEpoch&&now-this.scanCache.time<1000;
-    if(!hit)this.scanCache={epoch:this.treeEpoch,time:now,result:composedElements(document,20000)};
+    if(!hit)this.scanCache={epoch:this.treeEpoch,time:now,result:composedElements(document,PAGE_SCAN_LIMIT)};
     for(const el of this.scanCache!.result.elements){const root=el.getRootNode();if(root instanceof ShadowRoot)this.watch(root);}
     return {...this.scanCache!.result,cached:hit};
   }

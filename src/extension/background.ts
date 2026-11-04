@@ -1,14 +1,24 @@
 import { z } from 'zod';
-import { HOST_NAME, PROTOCOL_VERSION, PilotError, safeCode, exactOrigin, profileSchema,providerSelectSchema,providerConfigureSchema, type BrowserProfile } from '../shared.js';
+import { HOST_NAME, PROTOCOL_VERSION, PilotError, safeCode,safeErrorDetails, exactOrigin, profileSchema,providerSelectSchema,providerConfigureSchema, type BrowserProfile } from '../shared.js';
 import { createBrowserSession, type BrowserSession } from './session.js';
-import { nativeErrorCode } from './native-errors.js';
+import { nativeErrorCode,nativeErrorData } from './native-errors.js';
 import {enforceSafeTab,ownsCleanupTab} from './policy.js';
 import {waitForTab} from './readiness.js';
 import {buildInfo} from '../build-info.js';
 
 let native:chrome.runtime.Port|undefined,connecting:Promise<void>|undefined,profile:BrowserProfile,reconnectAttempts=0;
+let diagnosticVersion:1|2=1;
+let maintenanceId:string|undefined,activeDispatches=0,pendingStoreUpdate=false,maintenanceSealed=false;
+let uncertaintyWrite=Promise.resolve();
+function rememberUncertainty(sessionId:string){
+  uncertaintyWrite=uncertaintyWrite.catch(()=>{}).then(async()=>{
+    const stored=(await chrome.storage.local.get('updateUncertainties')).updateUncertainties;
+    const records=Array.isArray(stored)?stored.filter(item=>typeof item?.sessionId==='string'&&typeof item?.at==='number'):[];
+    await chrome.storage.local.set({updateUncertainties:[...records.filter(item=>item.sessionId!==sessionId),{sessionId,at:Date.now()}].slice(-100)});
+  });return uncertaintyWrite;
+}
 const requests=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-type Workspace={session:BrowserSession;runId?:string;windowId?:number;safeWindowId?:number;groupId?:number;tabs:Set<number>;createdTabs:Set<number>;createdLocations:Map<number,{windowId:number;groupId:number}>;busy:boolean;closed:boolean;allowPopups:boolean;allowedOrigins:string[];popups:Map<number,{tabId:number;status:'pending'|'ready'|'denied';code?:string}>};
+type Workspace={session:BrowserSession;runId?:string;completedRunId?:string;windowId?:number;safeWindowId?:number;groupId?:number;tabs:Set<number>;createdTabs:Set<number>;createdLocations:Map<number,{windowId:number;groupId:number}>;busy:boolean;closed:boolean;allowPopups:boolean;allowedOrigins:string[];popups:Map<number,{tabId:number;status:'pending'|'ready'|'denied';code?:string}>};
 const sessions=new Map<string,Workspace>(),owners=new Map<number,string>();
 async function safeWindow(windowId?:number){
   if(windowId!==undefined){
@@ -41,9 +51,13 @@ async function ensureConnected(){
     native=chrome.runtime.connectNative(HOST_NAME);
     const port=native;
     native.onMessage.addListener(message=>{
+      if(message?.event==='browser-reload'){
+        if(maintenanceId===message.updateId&&activeDispatches===0)chrome.runtime.reload();
+        return;
+      }
       if(message?.event==='browser-command'){
         const reply=(value:unknown)=>{try{port.postMessage(value);}catch{/* Disconnected actions are never replayed on a new connection. */}};
-        void dispatch(message.command,message.payload,message.source==='controller'?'controller':'mcp').then(data=>reply({event:'browser-result',id:message.id,ok:true,data}),error=>reply({event:'browser-result',id:message.id,ok:false,code:safeCode(error)}));return;
+        void dispatch(message.command,message.payload,message.source==='controller'?'controller':'mcp').then(data=>reply({event:'browser-result',id:message.id,ok:true,data}),error=>reply({event:'browser-result',id:message.id,ok:false,code:safeCode(error),data:nativeErrorData(error,diagnosticVersion)}));return;
       }
       const req=requests.get(message.id);if(!req)return;clearTimeout(req.timer);requests.delete(message.id);
       if(message.ok)req.resolve(message.data);else req.reject(new PilotError(message.code??'host_error'));
@@ -59,6 +73,7 @@ async function ensureConnected(){
     });
     await send('hello',profile);
     const hostIdentity=await send('status');
+    diagnosticVersion=hostIdentity.actionDiagnosticVersion===2?2:1;
     if(!hostIdentity.build||hostIdentity.build.contractVersion!==buildInfo.contractVersion){native?.disconnect();throw new PilotError('host_update_required');}
     reconnectAttempts=0;
     if(profile.nameSource!=='legacy'){
@@ -103,6 +118,31 @@ async function updateProfile(input:unknown){
     if(!profile.mcpEnabled)await Promise.allSettled([...sessions.values()].filter(w=>w.session.external).map(w=>release(w)));return profile;
 }
 async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller'):Promise<any>{
+  if(name.startsWith('update.')){
+    if(source!=='mcp')throw new PilotError('forbidden');
+    if(name==='update.status')return {fingerprint:buildInfo.fingerprint,contractVersion:buildInfo.contractVersion,ready:activeDispatches===0};
+    const id=z.string().uuid().parse(input?.updateId);
+    if(name==='update.prepare'){
+      if(maintenanceId&&maintenanceId!==id)throw new PilotError('update_already_applying');maintenanceId=id;
+      await uncertaintyWrite;
+      return {ready:activeDispatches===0,maintenanceId:id,uncertainSessions:(await chrome.storage.local.get('updateUncertainties')).updateUncertainties??[]};
+    }
+    if(name==='update.seal'&&maintenanceId===id){if(activeDispatches)return {ready:false};maintenanceSealed=true;return {ready:true};}
+    if(name==='update.resume'&&maintenanceId===id){maintenanceId=undefined;maintenanceSealed=false;return {resumed:true};}
+    throw new PilotError('unknown_command');
+  }
+  const safe=['status','run.status','run.cancel','cancel','session.release','v2.diagnostics'];
+  // Existing controllers must be able to drain. Broker admission blocks new runs.
+  if(maintenanceId&&(maintenanceSealed||source!=='controller'&&!safe.includes(name)))throw new PilotError('update_maintenance');
+  activeDispatches++;
+  try{
+    const result=await dispatchInternal(name,input,source);
+    if(['v2.commit','v2.site_call','files.upload'].includes(name)&&(result?.action?.outcome==='unknown'||result?.action?.dispatch==='unknown'||result?.dispatch==='unknown'))await rememberUncertainty(input?.sessionId??'panel');
+    return result;
+  }catch(error){if(['v2.commit','v2.site_call','files.upload'].includes(name)&&(['action_outcome_unknown','connection_lost'].includes(safeCode(error))||['sent','unknown'].includes(safeErrorDetails(error)?.dispatch??'')))await rememberUncertainty(input?.sessionId??'panel');throw error;}
+  finally{activeDispatches--;}
+}
+async function dispatchInternal(name:string,input:any,source:'panel'|'mcp'|'controller'):Promise<any>{
   if(source==='panel'&&['files.requests','files.begin','files.chunk','files.finish','files.fulfill','files.cancel','files.release'].includes(name)){
     await ensureConnected();const {sessionId='panel',...payload}=input??{},workspace=sessions.get(sessionId);
     if(!payload.requestId&&name!=='files.requests'&&(!workspace||workspace.closed||workspace.session.external))throw new PilotError('session_not_owned');
@@ -156,8 +196,8 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
     const result=await host(name,payload,sessionId);w.runId=result.id;return result;
   }
   if(name==='run.status'||name==='run.cancel'){
-    if(source!=='panel'||!w.runId||payload.runId!==w.runId)throw new PilotError('run_not_owned');
-    const result=await host(name,payload,sessionId);if(result.status!=='running')w.runId=undefined;return result;
+    if(source!=='panel'||!payload.runId||payload.runId!==w.runId&&payload.runId!==w.completedRunId)throw new PilotError('run_not_owned');
+    const result=await host(name,payload,sessionId);if(result.status!=='running'&&w.runId===payload.runId){w.completedRunId=w.runId;w.runId=undefined;}return result;
   }
   if(source==='panel'&&w.runId&&!['status','cancel','session.release'].includes(name))throw new PilotError('run_active');
   if(name==='status')return {...await w.session.invoke(name),extensionBuild:buildInfo,profile,sessions:[...sessions.values()].map(summary)};
@@ -232,4 +272,13 @@ chrome.tabs.onCreated.addListener(tab=>{
 // navigation invalidates the whole session; frame refs are revalidated separately.
 chrome.webNavigation.onBeforeNavigate.addListener(({tabId,frameId})=>{if(frameId!==0)return;const w=sessions.get(owners.get(tabId)??'');if(w?.session.binding?.tabId===tabId)w.session.invalidate(true,true);});
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
+function tryStoreUpdate(){
+  if(!pendingStoreUpdate)return;
+  if(maintenanceId||activeDispatches){setTimeout(tryStoreUpdate,5000);return;}
+  const id=crypto.randomUUID();maintenanceId=id;
+  void host('update.storeReady').then(result=>{if(result.ready&&activeDispatches===0)chrome.runtime.reload();else if(maintenanceId===id)maintenanceId=undefined;},()=>{if(maintenanceId===id)maintenanceId=undefined;}).finally(()=>{if(pendingStoreUpdate)setTimeout(tryStoreUpdate,5000);});
+}
+chrome.runtime.onUpdateAvailable.addListener(()=>{pendingStoreUpdate=true;tryStoreUpdate();});
+chrome.runtime.onInstalled.addListener(()=>{void ensureConnected().catch(()=>{});});
+chrome.runtime.onStartup.addListener(()=>{void ensureConnected().catch(()=>{});});
 void ensureConnected().catch(()=>{});

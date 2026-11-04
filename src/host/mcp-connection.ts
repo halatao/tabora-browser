@@ -26,6 +26,7 @@ export class McpConnection {
     try{return await peer.call(command,payload);}
     catch(error){
       if(error instanceof PilotError&&['connection_lost','ipc_timeout'].includes(error.code)){
+        if(error.code==='connection_lost')error.details={blockers:[],phase:'connection',cause:'disconnected',dispatch:'unknown',nextStep:'verify_outcome'};
         if(this.peer===peer)this.peer=undefined;peer.close();
       }
       throw error;

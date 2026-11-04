@@ -43,7 +43,7 @@ export class HostService {
   }
   private status(profile:string){
     const locked=this.locked(profile),keys=locked?[]:this.vault.list(profile).filter(e=>e.kind==='provider').map(e=>e.provider);
-    return {host:HOST_NAME,protocol:PROTOCOL_VERSION,version:buildInfo.version,build:buildInfo,locked,configs:this.configs,
+    return {host:HOST_NAME,protocol:PROTOCOL_VERSION,version:buildInfo.version,build:buildInfo,actionDiagnosticVersion:2,locked,configs:this.configs,
       providers:this.configs.map(c=>({provider:c.provider,state:c.provider==='openai-decisions'?'preview_unavailable':c.connection==='sdk'?'sdk_available':c.connection==='environment'?this.environmentKey(c.provider)?'configured_unverified':'missing_api_key':locked?'vault_locked':!keys.includes(c.provider)?'missing_api_key':!c.model?'missing_model':this.verified.has(profile+':'+c.provider)?'verified_session':'configured_unverified'}))};
   }
   private environmentKey(provider:string){return provider==='typesafe-jev'?process.env.TYPESAFE_API_KEY??process.env.JEV_API_KEY:undefined;}

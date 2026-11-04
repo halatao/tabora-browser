@@ -17,7 +17,7 @@ export function reader(registry:Registry,input:ReadInput):ReaderResult&{revision
     if(matches.length!==1)throw new Error('chart_requires_structured_source');el=matches[0];associatedTable=true;
     if(ancestor(el,'[data-private],[data-sensitive]'))throw new Error('data_not_exportable');
   }
-  const provenance={source:'page' as const,trust:'untrusted' as const,documentToken:registry.token,targetId:input.targetId,origin:location.origin,path:location.pathname};
+  const provenance={source:'page' as const,trust:'untrusted' as const,documentToken:registry.token,targetId:input.targetId,origin:globalThis.origin,path:location.pathname};
   const base={schemaVersion:2 as const,offset:input.offset,provenance};
   const exact=(node:Element,max=1000000)=>{const value=(node instanceof HTMLElement&&node.isContentEditable?editorText(node):content(node,max+1)).replace(/\r\n/g,'\n');if(value.length>max)throw new Error('reader_size_limit');return value;};
   const fingerprint=(value:string)=>{let hash=2166136261;for(let i=0;i<value.length;i++)hash=Math.imul(hash^value.charCodeAt(i),16777619);return String(hash>>>0);};

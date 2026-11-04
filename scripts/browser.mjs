@@ -96,7 +96,7 @@ async function worker() {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     if(origins.length)manifest.host_permissions = [...new Set(origins.map(x => originPermission(x).pattern))];
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-    context = await chromium.launchPersistentContext(paths.profile, { channel: 'chromium', headless: options.headless, args: [`--disable-extensions-except=${paths.extension}`, `--load-extension=${paths.extension}`], env: { ...process.env, TABORA_STATE_DIR: paths.state, TABORA_BROWSER_NAME: options.name } });
+    context = await chromium.launchPersistentContext(paths.profile, { channel: 'chromium', headless: options.headless, args: [`--disable-extensions-except=${paths.extension}`, `--load-extension=${paths.extension}`], env: { ...process.env, TABORA_STATE_DIR: paths.state, TABORA_BROWSER_NAME: options.name,TABORA_MANAGED_PROFILE:options.name } });
     const id = (await readFile(path.join(root, 'extension-id.txt'), 'utf8')).trim();
     const panel = await context.newPage(); await panel.goto(`chrome-extension://${id}/panel.html`);
     await panel.waitForFunction(() => document.querySelector('#connection')?.textContent === 'Lokální host připojený', undefined, { timeout: 30000 });

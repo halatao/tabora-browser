@@ -1,6 +1,6 @@
 {
   "name": "tabora-browser",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,6 +8,10 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "package": "node scripts/package.mjs",
+    "test:package": "node tests/package-smoke.mjs",
+    "test:update-browser": "node --import tsx tests/update-extension-browser.mjs",
+    "test:package-update": "node tests/package-update.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "node tests/browser.mjs",
@@ -27,6 +31,7 @@
     "test:background": "node tests/background-browser.mjs",
     "test:widgets": "node --import tsx tests/widget-browser.mjs",
     "test:visual": "node --import tsx tests/visual-workflow-browser.mjs",
+    "test:capture": "node tests/capture-guard-browser.mjs",
     "test:workflow": "node --import tsx tests/workflow-browser.mjs",
     "test:auth": "node --import tsx tests/auth-browser.mjs",
     "test:webmcp": "node tests/webmcp-native.mjs"

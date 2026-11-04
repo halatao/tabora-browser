@@ -2,13 +2,17 @@ import { createConnection, type Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { NativeDecoder, encodeMessage } from './codec.js';
-import { PilotError, safeCode } from '../shared.js';
+import { PilotError, safeCode, safeErrorDetails, actionDiagnosticSchema } from '../shared.js';
 
 const packetSchema=z.discriminatedUnion('type',[
   z.object({type:z.literal('request'),id:z.string().uuid(),command:z.string().max(60),payload:z.unknown().optional()}).strict(),
-  z.object({type:z.literal('response'),id:z.string().uuid(),ok:z.boolean(),data:z.unknown().optional(),code:z.string().optional()}).strict(),
+  z.object({type:z.literal('response'),id:z.string().uuid(),ok:z.boolean(),data:z.unknown().optional(),code:z.string().optional(),details:actionDiagnosticSchema.optional()}).strict(),
 ]);
+// Keep diagnostics inside the existing data field: resident clients from older
+// builds reject new envelope keys and would disconnect/release their sessions.
+const errorDataSchema=z.object({details:actionDiagnosticSchema}).strict();
 export class Peer {
+  capabilities?:{profileMetadataVersion?:number;updateLifecycleVersion?:number};
   handler:(command:string,payload:any)=>Promise<unknown>=async()=>{throw new PilotError('not_ready');};
   onclose:()=>void=()=>{};
   private pending=new Map<string,{resolve:(data:any)=>void;reject:(error:Error)=>void;timer:NodeJS.Timeout}>();
@@ -25,15 +29,24 @@ export class Peer {
         const m=packetSchema.parse(raw);
         if(m.type==='response'){
           const p=this.pending.get(m.id);if(!p)continue;clearTimeout(p.timer);this.pending.delete(m.id);
-          if(m.ok)p.resolve(m.data);else p.reject(new PilotError(m.code??'peer_error'));
+          if(m.ok)p.resolve(m.data);else {
+            const diagnostic=errorDataSchema.safeParse(m.data);
+            const error=new PilotError(m.code??'peer_error',undefined,m.details??(diagnostic.success?diagnostic.data.details:undefined));
+            p.reject(new PilotError(error.code,undefined,safeErrorDetails(error)));
+          }
         }else{
           if(++this.active>128)throw new PilotError('too_many_requests');
           void Promise.resolve().then(()=>this.handler(m.command,m.payload)).then(
             result=>this.send({type:'response',id:m.id,ok:true,data:result}),
-            error=>this.send({type:'response',id:m.id,ok:false,code:safeCode(error)}),
+            error=>{const details=safeErrorDetails(error);this.send({type:'response',id:m.id,ok:false,code:safeCode(error),data:details?{details}:undefined});},
           ).finally(()=>this.active--);
         }
-      }}catch{socket.destroy();}
+      }}catch{
+        // Preserve a local protocol failure instead of reporting it as a lost
+        // browser connection. Never log payloads or replay pending requests.
+        for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new PilotError('ipc_protocol_error'));}
+        this.pending.clear();process.stderr.write('Tabora IPC: ipc_protocol_error\n');socket.destroy();
+      }
     });
   }
   private send(value:unknown){if(this.socket.destroyed)return;try{this.socket.write(encodeMessage(value));}catch{this.socket.destroy();}}

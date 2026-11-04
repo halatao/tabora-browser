@@ -39,7 +39,9 @@ Coverage depends on the page and operation. See the [capability matrix](docs/cap
 
 ## Get started
 
-**You need:** Windows 10/11, Git and Node.js **22.13+**. No administrator rights required. Keep the checkout in a permanent directory.
+**Source installation:** Windows 10/11, Git and Node.js **22.13+**. No administrator rights required. Keep the checkout in a permanent directory.
+
+**Standalone preview:** Windows x64 ZIP packages include their own runtime and `tabora.exe install`; end users do not need Git or Node. Check [preview releases](https://github.com/halatao/tabora-browser/releases) for available packages. Their release manifests are signed with the public Ed25519 root embedded in Tabora. See [packaged installation, updates and release operations](docs/distribution.md). Chrome Web Store publishing and the stable Windows installer remain separate publisher gates.
 
 ### Recommended: a dedicated browser profile
 
@@ -164,6 +166,8 @@ npm run doctor -- --require-profile
 ```
 
 To update, stop managed profiles, run `git pull --ff-only` and rerun setup. Reload unpacked extensions in ordinary Chrome/Edge profiles. Keep the installed checkout at its original path.
+
+Tabora checks for new versions during MCP use and gives your agent an update notice for the current chat. Ask it to run `browser_update_check` for the installed channel and safe next step. Standalone packages add verified prepare/apply/status tools; source checkouts retain the manual workflow. [Update instructions](docs/updates.md) · [Standalone distribution](docs/distribution.md) · [Background execution and diagnostics](docs/background-reliability.md) · [Validation and timings](docs/background-validation-2026-11-03.md).
 
 [Data locations, removal and troubleshooting](docs/technical-reference.md#data-updates-and-removal)
 

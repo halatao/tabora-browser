@@ -1,29 +1,30 @@
 import type {BrowserAction} from '../capabilities.js';
-import {ancestor} from './semantic.js';
+import {ancestor,scrollContainer} from './semantic.js';
 import {Registry} from './registry.js';
-import {ready,exposedPoint} from './actionability.js';
+import {ready,waitExposedPoint} from './actionability.js';
 import {editorRange,editorText} from './editor.js';
 
-export function domAction(registry:Registry,action:BrowserAction,allowedOrigins:string[]=[]):Record<string,unknown>{
-  const entry=registry.resolve(action.targetId,true),el=entry.el;if(['fill','replace','check','select'].includes(action.type)&&(ancestor(el,'[data-private],[data-sensitive]')||entry.target.secret||['current-password','new-password','one-time-code'].includes(el.getAttribute('autocomplete')?.trim().split(/\s+/).at(-1)??'')))throw new Error('sensitive_or_unsupported_field');ready(el,['fill','replace'].includes(action.type));
+export async function domAction(registry:Registry,action:BrowserAction,allowedOrigins:string[]=[]):Promise<Record<string,unknown>>{
+  const entry=registry.resolve(action.targetId,true),el=entry.el;if(['fill','replace','check','select'].includes(action.type)&&(ancestor(el,'[data-private],[data-sensitive]')||entry.target.secret||['current-password','new-password','one-time-code'].includes(el.getAttribute('autocomplete')?.trim().split(/\s+/).at(-1)??'')))throw new Error('sensitive_or_unsupported_field');
+  if(!['click','check'].includes(action.type))ready(el,['fill','replace'].includes(action.type));
   if(action.type==='navigate'){if(!(el instanceof HTMLAnchorElement))throw new Error('wrong_target_kind');const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin&&!allowedOrigins.includes(url.origin))throw new Error('navigation_out_of_scope');location.assign(url.href);return {dispatch:'sent',outcome:'unverified',backend:'browser_navigation'};}
   if(action.type==='click'){
     if(action.backend!=='dom')throw new Error('native_backend_required');
-    exposedPoint(el);
+    await waitExposedPoint(()=>registry.resolve(action.targetId,true).el);
     if(el instanceof HTMLAnchorElement){const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin&&!allowedOrigins.includes(url.origin))throw new Error('navigation_out_of_scope');}
     if(!(el instanceof HTMLElement))throw new Error('native_backend_required');
     el.click();return {dispatch:'sent',outcome:'unverified'};
   }
   if(action.type==='scroll'){
-    const before={x:el.scrollLeft,y:el.scrollTop};el.scrollBy({left:action.x,top:action.y,behavior:'instant'});
-    return {dispatch:'sent',outcome:'verified',scroll:{x:el.scrollLeft,y:el.scrollTop},progress:before.x!==el.scrollLeft||before.y!==el.scrollTop};
+    const scrolling=scrollContainer(el),before={x:scrolling.scrollLeft,y:scrolling.scrollTop};scrolling.scrollBy({left:action.x,top:action.y,behavior:'instant'});
+    return {dispatch:'sent',outcome:'verified',scroll:{x:scrolling.scrollLeft,y:scrolling.scrollTop},progress:before.x!==scrolling.scrollLeft||before.y!==scrolling.scrollTop};
   }
   if(['key','hover','drag'].includes(action.type))throw new Error('native_backend_required');
   if(action.type==='check'){
     if(!(el instanceof HTMLInputElement)||!['checkbox','radio'].includes(el.type))throw new Error('native_backend_required');
     if(el.checked===action.checked&&!el.indeterminate)return {dispatch:'not_needed',outcome:'verified',checked:el.checked};
     if(el.type==='radio'&&!action.checked)throw new Error('unsupported_radio_uncheck');
-    exposedPoint(el);el.click();if(el.checked!==action.checked||el.indeterminate)return {dispatch:'sent',outcome:'failed',code:'verification_failed'};
+    await waitExposedPoint(()=>registry.resolve(action.targetId,true).el);el.click();if(el.checked!==action.checked||el.indeterminate)return {dispatch:'sent',outcome:'failed',code:'verification_failed'};
     return {dispatch:'sent',outcome:'verified',checked:el.checked};
   }
   if(action.type==='select'){

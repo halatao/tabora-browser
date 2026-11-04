@@ -1,10 +1,23 @@
+export const PAGE_SCAN_LIMIT=20000;
+export function scrollContainer(el:Element):Element{return el===document.body||el===document.documentElement?document.scrollingElement??el:el;}
 /** Composed-tree helpers are bundled into the fixed sensor, never accepted as agent code. */
+const shadowHostNames=new Set(['article','aside','blockquote','body','div','footer','h1','h2','h3','h4','h5','h6','header','main','nav','p','section','span']);
+const reservedCustomNames=new Set(['annotation-xml','color-profile','font-face','font-face-src','font-face-uri','font-face-format','font-face-name','missing-glyph']);
+export function shadowRoot(el:Element):ShadowRoot|null{
+  if(!(el instanceof HTMLElement))return null;
+  const name=el.localName;
+  // DOM's valid shadow host names. Passing a large HTMLFormElement to the
+  // Chrome API enumerates its named controls, despite it never hosting a root.
+  const custom=typeof name==='string'&&name.includes('-')&&/^[a-z][^\0\t\n\f\r />A-Z]*$/u.test(name)&&!reservedCustomNames.has(name);
+  if(!shadowHostNames.has(name)&&!custom)return null;
+  return el.shadowRoot??(typeof chrome!=='undefined'?chrome.dom?.openOrClosedShadowRoot(el):null)??null;
+}
 export function parentElement(el:Element):Element|null{
   const assigned=(el as HTMLElement).assignedSlot;if(assigned)return assigned;
   const parent=el.parentElement;
   // assignedSlot intentionally returns null for a slot inside a closed root.
   // The extension's authorized shadow API can still recover the composed parent.
-  const shadow=parent instanceof HTMLElement?(parent.shadowRoot??(typeof chrome!=='undefined'?chrome.dom?.openOrClosedShadowRoot(parent):null)):null;
+  const shadow=parent?shadowRoot(parent):null;
   if(shadow){const slots=shadow.querySelectorAll('slot');if(slots.length>1000)throw new Error('shadow_slot_limit');for(const slot of slots)if(slot.assignedNodes().includes(el))return slot;}
   return parent??(el.getRootNode() instanceof ShadowRoot?(el.getRootNode() as ShadowRoot).host:null);
 }
@@ -31,7 +44,7 @@ export function content(el:Element,maxChars=1000000,includeHidden=false,exclude?
     if(node.matches('[data-private],[data-sensitive],input[type="password"],[autocomplete="current-password"],[autocomplete="new-password"]')){append('[redacted]');return;}
     if(node.matches('br')){append('\n');return;}
     const block=/^(block|flex|grid|table-row|list-item)$/.test(getComputedStyle(node).display);if(block&&size&&!chunks[chunks.length-1]?.endsWith('\n'))append('\n',true);
-    const shadow=node.shadowRoot??(node instanceof HTMLElement&&typeof chrome!=='undefined'&&chrome.dom?chrome.dom.openOrClosedShadowRoot(node):null);
+    const shadow=shadowRoot(node);
     const children=node instanceof HTMLSlotElement&&node.assignedNodes({flatten:true}).length?node.assignedNodes({flatten:true}):shadow?shadow.childNodes:node.childNodes;
     for(const child of children)visit(child,depth+1);if(block&&size&&!chunks[chunks.length-1]?.endsWith('\n'))append('\n',true);
   };
@@ -76,7 +89,7 @@ export function composedElements(root:Document|ShadowRoot|Element,max=5000):{ele
   const result:Element[]=[],seen=new Set<Element>(),queue:Element[]=root instanceof Element?[root]:Array.from(root.children).reverse();let truncated=false;
   while(queue.length&&result.length<max){
     const el=queue.pop()!;if(seen.has(el))continue;seen.add(el);result.push(el);
-    const shadow=el.shadowRoot??(el instanceof HTMLElement&&typeof chrome!=='undefined'&&chrome.dom?chrome.dom.openOrClosedShadowRoot(el):null);
+    const shadow=shadowRoot(el);
     const children=el instanceof HTMLSlotElement?el.assignedElements({flatten:true}):shadow?Array.from(shadow.children):Array.from(el.children);
     const capacity=max-result.length-queue.length;if(children.length>capacity)truncated=true;
     for(let i=Math.min(children.length,capacity)-1;i>=0;i--)queue.push(children[i]);

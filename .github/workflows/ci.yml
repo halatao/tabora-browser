@@ -20,6 +20,7 @@ jobs:
       - run: npx playwright install chromium
       - run: npm run test:native
       - run: npm run test:managed
+      - run: npm run test:update-browser
       - run: npm run test:mcp
       - run: npm run test:mcp-legacy
       - run: npm run test:browser

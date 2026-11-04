@@ -15,9 +15,10 @@ const fixture=`<!doctype html><title>Background interaction</title><style>button
 <button id="dom">DOM save</button><button id="native">Native save</button><label>Editor<input id="editor"></label><button id="hover">Hover menu</button><button id="revealed" hidden>Revealed action</button>
 <div draggable="true" role="listitem" aria-label="Movable record" id="source">Record</div><div id="drop" role="region" aria-label="Drop destination">Drop here</div>
 <div role="img" aria-label="Visual board" id="board"><canvas width="320" height="160"></canvas><input type="password" value="synthetic-private-value" id="private"></div>
-<a href="/next">Continue</a><p role="status" aria-label="Result">Ready</p>
+<a href="/next">Continue</a><p role="status" aria-label="Result">Ready</p><p id="first-read" role="status" aria-label="Renderer readiness">Waiting for render</p>
 <script>
 const status=document.querySelector('p'),editor=document.querySelector('#editor'),canvas=document.querySelector('canvas');const ctx=canvas.getContext('2d');ctx.fillStyle='#00ff00';ctx.fillRect(0,0,320,160);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector('#first-read').textContent='Rendered in background'));});
 function record(kind,event){if(document.hidden||!document.hasFocus())return;requestAnimationFrame(()=>requestAnimationFrame(async()=>{const body={kind,trusted:event.isTrusted,visible:!document.hidden,focused:document.hasFocus(),value:editor.value};status.textContent=await(await fetch('/write',{method:'POST',body:JSON.stringify(body)})).text();}));}
 document.querySelector('#dom').onclick=e=>record('dom',e);
 document.querySelector('#native').onclick=e=>{if(e.isTrusted)record('native',e);};
@@ -32,9 +33,9 @@ const server=createServer((req,res)=>{
   res.writeHead(200,{'content-type':'text/html'}).end(req.url==='/next'?'<title>Destination</title><h1>Navigation completed</h1>':fixture);
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
-const watchdog=setTimeout(()=>{console.error('Background integration timed out');process.exit(1);},180000);
+const watchdog=setTimeout(()=>{console.error('Background integration timed out');process.exit(1);},Math.max(180000,Number(process.env.TABORA_BACKGROUND_IDLE_MS??0)+180000));
 try{
-  await cp('dist/extension',extension,{recursive:true});const manifest=JSON.parse(await readFile(path.join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['http://127.0.0.1/*'];await writeFile(path.join(extension,'manifest.json'),JSON.stringify(manifest));
+  const testedBuild=JSON.parse(await readFile('dist/build-info.json','utf8'));await cp('dist/extension',extension,{recursive:true});const manifest=JSON.parse(await readFile(path.join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['http://127.0.0.1/*'];await writeFile(path.join(extension,'manifest.json'),JSON.stringify(manifest));
   // Launch plain Chromium: no Playwright focus override or global background-throttling flags.
   const profilePath=path.join(directory,'chromium');await mkdir(profilePath);
   browserProcess=spawn(chromium.executablePath(),[`--user-data-dir=${profilePath}`,'--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--no-first-run','--no-default-browser-check','--window-size=1000,800',`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,...(process.env.TABORA_BACKGROUND_HEADFUL==='1'?[]:['--headless=new'])],{windowsHide:true,stdio:'ignore',env:{...process.env,TABORA_STATE_DIR:state}});
@@ -56,6 +57,8 @@ try{
   assert.equal(await page.evaluate(()=>document.hidden),true,'Fixture must really start hidden; no harness focus emulation');
   const observe=()=>tool('browser_state',{sessionId:session.id});
   const target=(observation,name)=>{const matches=observation.snapshot.targets.filter(target=>target.name===name);assert.equal(matches.length,1,name);return matches[0];};
+  const coldRead=await observe(),renderTarget=target(coldRead,'Renderer readiness');
+  const rendered=await tool('browser_read',{sessionId:session.id,targetId:renderTarget.id,format:'text'});assert(rendered.text.includes('Rendered in background'));checks.push('first observation/read prepare the hidden renderer before any action');
   const commit=async(action,expect)=>{
     const observation=await observe(),plan=await tool('browser_plan',{sessionId:session.id,stateVersion:observation.stateVersion,action:action(observation),expect,timeoutMs:3000});
     return tool('browser_commit',{sessionId:session.id,actionId:plan.actionId,stateVersion:plan.stateVersion});
@@ -73,9 +76,13 @@ try{
     const plan=await tool('browser_plan',{sessionId:session.id,stateVersion:observation.stateVersion,action:action(observation),expect:{type:'text',targetId:resultTarget.id,contains:'Saved '+(before+1)}});
     const start=performance.now(),result=await tool('browser_commit',{sessionId:session.id,actionId:plan.actionId,stateVersion:plan.stateVersion});
     assert.equal(result.readiness.state,'verified',JSON.stringify(result));assert.equal(writes.length,before+1);const write=writes.at(-1);assert.equal(write.kind,kind);assert(write.visible&&write.focused);if(kind!=='dom')assert(write.trusted);
-    return {wallMs:Math.round((performance.now()-start)*100)/100,executorMs:result.timings.totalMs,phases:result.timings};
+    return {wallMs:Math.round((performance.now()-start)*100)/100,executorMs:result.timings.totalMs,phases:{...result.timings,background:result.backgroundTimings,interaction:result.interaction}};
   };
   await save('dom',observation=>({type:'click',targetId:target(observation,'DOM save').id}));await remainsBackground();checks.push('DOM action + visibility/focus guard + double rAF readiness without tab activation');
+  for(let repeat=1;repeat<Number(process.env.TABORA_BACKGROUND_REPETITIONS??1);repeat++){
+    await save('dom',observation=>({type:'click',targetId:target(observation,'DOM save').id}));await remainsBackground();
+    await save('native',observation=>({type:'click',targetId:target(observation,'Native save').id,backend:'native'}));await remainsBackground();
+  }
   await save('native',observation=>({type:'click',targetId:target(observation,'Native save').id,backend:'native'}));await remainsBackground();checks.push('trusted native click in hidden tab reaches independent server exactly once');
   await commit(observation=>({type:'fill',targetId:target(observation,'Editor').id,value:'background text',backend:'native'}));
   await save('key',observation=>({type:'key',targetId:target(observation,'Editor').id,key:'Enter'}));assert.equal(writes.at(-1).value,'background text');await remainsBackground();checks.push('trusted text/key input targets only the observed element; user editor unchanged');
@@ -86,10 +93,13 @@ try{
   const pixel=(x,y)=>Array.from(pixels.slice((y*canvas.width+x)*4,(y*canvas.width+x)*4+3));assert(pixel(Math.round(40*canvas.width/320),Math.round(60*canvas.height/160))[1]>230,'Screenshot must contain target pixels, not active witness tab');assert(pixel(Math.round(240*canvas.width/320),Math.round(40*canvas.height/160)).every(value=>value<15),'Private field must remain blacked out: '+JSON.stringify({width:canvas.width,height:canvas.height,visual:capture.visual,pixel:pixel(Math.round(240*canvas.width/320),Math.round(40*canvas.height/160))}));await remainsBackground();
   await save('canvas',()=>({type:'image_click',targetId:board.id,captureId:capture.visual.captureId,x:40,y:60}),imageState);await remainsBackground();checks.push('target-only screenshot, password pixel masks and capture-bound image click');
   // Another debugger lease, even from this extension, must remain attached on failure.
+  const beforeDebugger=await observe();
   await panel.evaluate(id=>chrome.debugger.attach({tabId:id},'1.3'),opened.tabId);
   try{
-    const observation=await observe(),plan=await tool('browser_plan',{sessionId:session.id,stateVersion:observation.stateVersion,action:{type:'click',targetId:target(observation,'Native save').id,backend:'native'}}),before=writes.length;
+    const observation=beforeDebugger,plan=await tool('browser_plan',{sessionId:session.id,stateVersion:observation.stateVersion,action:{type:'click',targetId:target(observation,'Native save').id,backend:'native'}}),before=writes.length;
+    await tool('browser_state',{sessionId:session.id},'background_debugger_unavailable');
     await tool('browser_commit',{sessionId:session.id,actionId:plan.actionId,stateVersion:plan.stateVersion},'background_debugger_unavailable');assert.equal(writes.length,before);
+    const diagnostics=await tool('browser_diagnostics',{sessionId:session.id});assert.equal(diagnostics.maxBytes,128000);assert.equal(diagnostics.truncated,false);assert(diagnostics.events.some(event=>event.code==='background_debugger_unavailable'&&event.details.dispatch==='not_sent'));
     assert(await panel.evaluate(id=>chrome.debugger.getTargets().then(targets=>targets.some(target=>target.tabId===id&&target.attached)),opened.tabId));
   }finally{await panel.evaluate(id=>chrome.debugger.detach({tabId:id}),opened.tabId);}
   await remainsBackground();checks.push('competing debugger fails before write and is never detached by executor');
@@ -97,15 +107,18 @@ try{
   await save('native',observation=>({type:'click',targetId:target(observation,'Native save').id,backend:'native'}));await remainsBackground(true);checks.push('native action + rAF readiness in minimized window without restoring it');
   await panel.evaluate(id=>chrome.windows.update(id,{state:'normal'}),opened.windowId);
   // Balanced warm executor comparison, excluding setup/observation/decision inference. Same page/model-free lane.
-  for(let pair=0;pair<6;pair++)for(const mode of pair%2?['background','active']:['active','background']){
+  for(let pair=0;pair<Number(process.env.TABORA_BACKGROUND_PAIRS??30);pair++)for(const mode of pair%2?['background','active']:['active','background']){
     await panel.evaluate(id=>chrome.tabs.update(id,{active:true}),mode==='active'?opened.tabId:witnessId);
     const timing=await save('native',observation=>({type:'click',targetId:target(observation,'Native save').id,backend:'native'}));samples.push({pair,mode,...timing});
   }
   await panel.evaluate(id=>chrome.tabs.update(id,{active:true}),witnessId);await panel.evaluate(()=>globalThis.activations=[]);
+  const idleMs=Number(process.env.TABORA_BACKGROUND_IDLE_MS??0);
+  let idleResult;
+  if(idleMs>0){console.error('Idle regression: '+idleMs+' ms with an inactive tab and no renderer lease');await new Promise(resolve=>setTimeout(resolve,idleMs));idleResult=await save('native',observation=>({type:'click',targetId:target(observation,'Native save').id,backend:'native'}));await remainsBackground();checks.push('background native action after '+idleMs+' ms idle');}
   const navigated=await commit(observation=>({type:'click',targetId:target(observation,'Continue').id,backend:'native'}));assert.equal(navigated.snapshot.path,'/next');assert.notEqual(navigated.binding.documentId,imageState.binding.documentId);await remainsBackground();checks.push('native navigation rebinds exact owned document in background');
   await setupCdp.detach();await tool('browser_session_release',{sessionId:session.id});
   const median=values=>{const sorted=values.toSorted((a,b)=>a-b);return (sorted[Math.floor((sorted.length-1)/2)]+sorted[Math.floor(sorted.length/2)])/2;};
-  const report={passed:true,kind:'background_executor_integration',extensionVersion:manifest.version,headless:process.env.TABORA_BACKGROUND_HEADFUL!=='1',browser:browser.version(),checks,samples,summary:Object.fromEntries(['active','background'].map(mode=>{const values=samples.filter(sample=>sample.mode===mode);return [mode,{runs:values.length,medianWallMs:median(values.map(value=>value.wallMs)),medianExecutorMs:median(values.map(value=>value.executorMs))}];})),scope:'Matched warm real extension/MCP executor; no model inference, not an external agent benchmark'};
+  const report={passed:true,kind:'background_executor_integration',stressScope:'repetitions applies to DOM/native saves; other scenarios run once',extensionVersion:manifest.version,build:testedBuild,repetitions:Number(process.env.TABORA_BACKGROUND_REPETITIONS??1),idle:idleMs>0?{waitMs:idleMs,...idleResult}:undefined,headless:process.env.TABORA_BACKGROUND_HEADFUL!=='1',browser:browser.version(),checks,samples,summary:Object.fromEntries(['active','background'].map(mode=>{const values=samples.filter(sample=>sample.mode===mode);return [mode,{runs:values.length,medianWallMs:median(values.map(value=>value.wallMs)),medianExecutorMs:median(values.map(value=>value.executorMs)),p95WallMs:values.map(value=>value.wallMs).sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]}];})),scope:'Matched warm real extension/MCP executor; no model inference, not an external agent benchmark'};
   await mkdir('reports/background',{recursive:true});await writeFile('reports/background/latest.json',JSON.stringify(report,null,2));await writeFile(`reports/background/${report.headless?'headless':'headed'}.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{
   clearTimeout(watchdog);await client?.close().catch(()=>{});

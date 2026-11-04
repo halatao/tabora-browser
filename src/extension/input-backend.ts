@@ -43,5 +43,5 @@ export async function nativeInput(tabId:number,action:BrowserAction,point:Point,
     if(handling)await handling;return {dispatch:'sent',outcome:blocked?'unknown':'unverified',backend:'chrome_input',...(blocked?{code:'needs_user'}:{})};
   }catch(error){if(sent)return {dispatch:'unknown',outcome:'unknown',backend:'chrome_input',code:error instanceof PilotError?error.code:'native_input_interrupted'};throw error instanceof PilotError?error:new PilotError('native_input_unavailable');}
   finally{chrome.debugger.onEvent.removeListener(opening);if(action.type==='drag')await chrome.debugger.sendCommand(target,'Input.cancelDragging').catch(()=>{});}
-  });
+  },true,['click','hover','drag','image_click','check'].includes(action.type));
 }

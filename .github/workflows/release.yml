@@ -1,0 +1,123 @@
+name: Windows release packages
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [stable, preview]
+        default: stable
+  push:
+    tags: ['v*', 'preview-v*']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    environment: release
+    timeout-minutes: 40
+    env:
+      TABORA_RELEASE_CHANNEL: ${{ startsWith(github.ref_name, 'preview-v') && 'preview' || inputs.channel || 'stable' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Require release identity and trust
+        shell: pwsh
+        env:
+          TABORA_RELEASE_TRUST: ${{ vars.TABORA_RELEASE_TRUST }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $releaseTag = if ($env:TABORA_RELEASE_CHANNEL -eq 'preview') { "preview-v$version" } else { "v$version" }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $releaseTag) { throw 'Tag/package version/channel mismatch.' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and -not $env:TABORA_RELEASE_TRUST) { throw 'Configure release public trust first.' }
+      - name: Package standalone runtime
+        run: npm run package
+        env:
+          TABORA_RELEASE_TRUST: ${{ vars.TABORA_RELEASE_TRUST }}
+      - name: Test exact packaged payload without system Node or Git
+        run: npm run test:package -- release/payload
+      - name: Test packaged offline update and broker generation change
+        run: npm run test:package-update -- release/payload
+      - name: Build Windows installer
+        if: env.TABORA_RELEASE_CHANNEL == 'stable'
+        shell: pwsh
+        run: |
+          $compilerInstaller = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $compilerInstaller
+          $signature = Get-AuthenticodeSignature -LiteralPath $compilerInstaller
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B.V.') { throw 'Compiler publisher verification failed.' }
+          $compilerRoot = Join-Path $env:RUNNER_TEMP 'inno'
+          $compilerInstall = Start-Process -FilePath $compilerInstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/NOICONS',('/DIR="' + $compilerRoot + '"')) -WindowStyle Hidden -Wait -PassThru
+          if ($compilerInstall.ExitCode -ne 0) { throw 'Compiler installation failed.' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          & (Join-Path $compilerRoot 'ISCC.exe') "/DPayload=$pwd\release\payload" "/DAppVersion=$version" installer/tabora.iss
+          if ($LASTEXITCODE) { throw 'Installer compilation failed.' }
+      - name: Sign tagged installer and release manifest
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          TABORA_RELEASE_PRIVATE_KEY: ${{ secrets.TABORA_RELEASE_PRIVATE_KEY }}
+          TABORA_AUTHENTICODE_PFX: ${{ secrets.TABORA_AUTHENTICODE_PFX }}
+          TABORA_AUTHENTICODE_PASSWORD: ${{ secrets.TABORA_AUTHENTICODE_PASSWORD }}
+          TABORA_RELEASE_SEQUENCE: ${{ github.run_number }}
+        run: |
+          if (-not $env:TABORA_RELEASE_PRIVATE_KEY) { throw 'Release manifest signing key is required.' }
+          if ($env:TABORA_RELEASE_CHANNEL -eq 'preview') {
+            node scripts/release-manifest.mjs release
+            if ($LASTEXITCODE) { throw 'Preview release manifest signing failed.' }
+            exit 0
+          }
+          if (-not $env:TABORA_AUTHENTICODE_PFX) { throw 'Stable installer signing certificate is required.' }
+          $certificateFile = Join-Path $env:RUNNER_TEMP 'tabora-release.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certificateFile, [Convert]::FromBase64String($env:TABORA_AUTHENTICODE_PFX))
+            $password = ConvertTo-SecureString $env:TABORA_AUTHENTICODE_PASSWORD -AsPlainText -Force
+            $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new($certificateFile, $password)
+            $installer = Get-Item release/*-setup.exe
+            $signature = Set-AuthenticodeSignature -LiteralPath $installer.FullName -Certificate $certificate -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256
+            if ($signature.Status -ne 'Valid') { throw 'Installer signature verification failed.' }
+            node scripts/release-manifest.mjs release
+            if ($LASTEXITCODE) { throw 'Release manifest signing failed.' }
+          } finally {
+            if (Test-Path -LiteralPath $certificateFile) { Remove-Item -LiteralPath $certificateFile }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabora-windows-x64
+          path: |
+            release/*.zip
+            release/*-setup.exe
+            release/release-manifest.*
+            release/SHA256SUMS
+            release/sbom.json
+          if-no-files-found: error
+  publish:
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tabora-windows-x64
+          path: release
+      - name: Publish complete tested asset set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PREVIEW: ${{ startsWith(github.ref_name, 'preview-v') }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --draft --prerelease="$RELEASE_PREVIEW" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          gh release download "$GITHUB_REF_NAME" --dir verification
+          for artifact in release/*; do cmp -- "$artifact" "verification/${artifact##*/}"; done
+          if [ "$RELEASE_PREVIEW" = "true" ]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
+          else
+            gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          fi

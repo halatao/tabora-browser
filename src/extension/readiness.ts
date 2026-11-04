@@ -3,17 +3,35 @@ import {withTargetDebugger} from './target-debugger.js';
 // One interaction per extension/profile, including readiness and fresh observation.
 // CDP focus emulation is scoped to the owned tab; desktop focus is never changed.
 let interactionQueue:Promise<void>=Promise.resolve();
-export async function withInteractiveTab<T>(tabId:number,validate:()=>Promise<void>,action:()=>Promise<T>,timeoutMs=15000):Promise<T>{
-  const previous=interactionQueue;let release!:()=>void;
+export async function withInteractiveTab<T>(tabId:number,validate:()=>Promise<void>,action:()=>Promise<T>,timeoutMs=15000,paintRequired=false):Promise<T>{
+  const queuedAt=performance.now(),previous=interactionQueue;let release!:()=>void;
   const lease=new Promise<void>(resolve=>{release=resolve;});
   interactionQueue=previous.then(()=>lease);
   let timer:ReturnType<typeof setTimeout>|undefined;
   try{
-    await Promise.race([previous,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new PilotError('interaction_busy')),timeoutMs);})]);
+    await Promise.race([previous,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new PilotError('interaction_busy',undefined,{blockers:[],phase:'queue',dispatch:'not_sent',deadlineMs:timeoutMs,nextStep:'retry_read'})),timeoutMs);})]);
     clearTimeout(timer);await validate();
-    await chrome.tabs.get(tabId);
+    const tab=await chrome.tabs.get(tabId).catch(()=>{throw new PilotError('tab_closed');});
+    const window=await chrome.windows.get(tab.windowId);
+    const tabState={active:tab.active,discarded:tab.discarded,frozen:(tab as chrome.tabs.Tab&{frozen?:boolean}).frozen,windowState:window.state,windowFocused:window.focused};
+    if(tab.discarded||tabState.frozen)throw new PilotError(tab.discarded?'tab_discarded':'tab_frozen',undefined,{blockers:[],phase:'lifecycle',cause:tab.discarded?'discarded':'frozen',dispatch:'not_sent',nextStep:'handoff',tab:tabState});
     await validate();
-    return await withTargetDebugger(tabId,validate,()=>action(),false);
+    const started=performance.now();let protectedTab=false,result:T|undefined;
+    try{
+      if(tab.autoDiscardable===true){await chrome.tabs.update(tabId,{autoDiscardable:false});protectedTab=true;await validate();}
+      result=await withTargetDebugger(tabId,validate,()=>action(),false,paintRequired);
+      if(result&&typeof result==='object')Object.assign(result,{interaction:{totalMs:Math.round(performance.now()-started),queueMs:Math.round(started-queuedAt),tab:tabState}});
+      return result;
+    }catch(error){
+      if(error instanceof PilotError&&/^(background_|target_|modal_blocked)/.test(error.code))error.details={blockers:[],phase:/attach|debugger/.test(error.code)?'attach':error.code.startsWith('background_')?'render':'actionability',dispatch:'not_sent',tab:tabState,...error.details};
+      throw error;
+    }finally{
+      if(protectedTab){
+        const live=await chrome.tabs.get(tabId).catch(()=>undefined);
+        if(live?.autoDiscardable===false)try{await chrome.tabs.update(tabId,{autoDiscardable:true});}
+        catch{if(result&&typeof result==='object')Object.assign(result,{backgroundWarning:{code:'background_discard_restore_failed',nextStep:'inspect_tab_policy'}});}
+      }
+    }
   }finally{clearTimeout(timer);release();}
 }
 /** Subscribe before checking state; loading/complete transitions cannot fall in a gap. */

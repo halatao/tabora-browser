@@ -47,7 +47,7 @@ async function fixturePage(context,url){
 }
 try{
   const a=await browser('profile-a');console.log('Profile A connected');const b=await browser('profile-b');console.log('Profile B connected');assert.notEqual(a.profile.id,b.profile.id);
-  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,48);
+  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,53);
   assert.equal((await tool(c,'browser_profiles')).length,2);
   assert.equal(a.profile.mode,'safe');assert.equal(a.profile.vaultEnabled,false);
   await a.rpc('vault.unlock').then(()=>assert.fail('Disabled vault unlocked'),e=>assert.equal(e.message,'vault_disabled'));
@@ -97,6 +97,7 @@ try{
   await panelRpc('tabs.open',{url:origin+'/two',waitForReady:true});
   const panelRun=await panelRpc('run.start',{goal,provider:'openai-decisions',maxSteps:1,timeoutMs:3000});
   let panelOutcome;do{panelOutcome=await panelRpc('run.status',{runId:panelRun.id});}while(panelOutcome.status==='running');
+  assert.deepEqual(await panelRpc('run.status',{runId:panelRun.id}),panelOutcome,'Terminal status remains queryable after the panel poller reads it');
   const mcpRun=await tool(c,'browser_run_start',{sessionId:s1.id,goal,provider:'openai-decisions',maxSteps:1,timeoutMs:3000});
   let mcpOutcome;do{mcpOutcome=await tool(c,'browser_run_status',{runId:mcpRun.id});}while(mcpOutcome.status==='running');
   for(const outcome of [panelOutcome,mcpOutcome]){assert.equal(outcome.status,'completed',JSON.stringify(outcome));assert.equal(outcome.execution.engine,'workflow-v2');assert.equal(outcome.execution.goalPlanning,'grounded-goal');assert.equal(outcome.metrics.decisions,0);assert.equal(outcome.metrics.actions,0);}
@@ -245,11 +246,14 @@ try{
   assert.equal((await b.rpc('sessions.list')).filter(s=>s.external).length,0);
   assert.deepEqual(errors,[]);
   console.log('Integration assertions passed; closing test resources');
-  report={completedAt:new Date().toISOString(),profiles:2,mcpClients:2,tools:48,passed:true,checks:['provider catalog and exact model validation','MCP provider selection updates panel','provider selection revokes pending actions in only its profile','stdio MCP handshake','automatic MCP access with revocation','Safe new groups in existing windows and existing-tab denial','Safe rejects tabs moved out of the group','Readonly extraction and mutation denial','mode switch revokes prepared action','disabled vault blocks credentials','same-session group reuse','tab ownership','client ownership','section titles and table previews','all extraction bounds reported','atomic menu readiness','atomic navigation rebind','stale revision rejection without replay','profile-scoped unlock','private credential denial across profiles','shared credential fill','scope revocation','parallel profiles','single-use actions','navigation invalidation and reattach','missing host permission','release leaves tabs open','MCP disable revokes sessions','client disconnect cleanup','380px layout'],timings};
+  report={completedAt:new Date().toISOString(),profiles:2,mcpClients:2,tools:50,passed:true,checks:['provider catalog and exact model validation','MCP provider selection updates panel','provider selection revokes pending actions in only its profile','stdio MCP handshake','automatic MCP access with revocation','Safe new groups in existing windows and existing-tab denial','Safe rejects tabs moved out of the group','Readonly extraction and mutation denial','mode switch revokes prepared action','disabled vault blocks credentials','same-session group reuse','tab ownership','client ownership','section titles and table previews','all extraction bounds reported','atomic menu readiness','atomic navigation rebind','stale revision rejection without replay','profile-scoped unlock','private credential denial across profiles','shared credential fill','scope revocation','parallel profiles','single-use actions','navigation invalidation and reattach','missing host permission','release leaves tabs open','MCP disable revokes sessions','client disconnect cleanup','380px layout'],timings};
 }catch(error){console.error('MCP integration failed before cleanup:',error);throw error;}finally{
   for(const c of clients)await c.close().catch(()=>{});
-  for(const [index,context] of contexts.entries()){
-    let timer;const closing=context.close();
+  // Both profiles share a broker in Chromium's native-process job. Start both
+  // closes before waiting so one surviving profile cannot hold the other open.
+  const closings=contexts.map(context=>context.close());
+  for(const [index,closing] of closings.entries()){
+    let timer;
     try{await Promise.race([closing,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Browser cleanup timed out')),5000);})]);}
     catch{forcedCleanup++;execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.resolve('tests/close-browser.ps1'),'-ProfilePath',path.join(directory,index===0?'profile-a':'profile-b')],{windowsHide:true,stdio:'ignore'});await Promise.race([closing,new Promise(resolve=>setTimeout(resolve,1000))]);}
     finally{clearTimeout(timer);}

@@ -16,6 +16,8 @@ test('panel receives Chrome disconnect cause and can reconnect without replaying
   const sent:string[]=[];
   const ports:{disconnect:()=>void}[]=[];
   const runtime:any={id:'fixture-extension',getURL:(file:string)=>'chrome-extension://fixture-extension/'+file,
+    onUpdateAvailable:{addListener:()=>{}},
+    onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},
     onMessage:{addListener:(fn:any)=>{panelListener=fn;}}
   };
   runtime.connectNative=()=>{

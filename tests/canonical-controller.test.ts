@@ -59,6 +59,18 @@ test('cancellation interrupts an unresolved browser call, preserves ownership an
   assert.throws(()=>c.start('owner','profile','s','codex-sdk','Read',async()=>{},options),/run_active/);
   c.cancelProfile('profile');const result=await terminal(c,run.id);assert.equal(result.status,'cancelled');assert(!calls.includes('v2.commit'));assert.throws(()=>c.status('foreign',run.id),/run_not_owned/);
 });
+
+test('commit-time overlay details reach the next decision; a sent error is never retried',async()=>{
+  for(const dispatch of ['not_sent','sent'] as const){
+    const f=fixture([control('go','button','Launch'),control('body','generic','Page body')]);let commits=0,history:any;
+    const details={blockers:[],phase:'actionability' as const,dispatch,cause:'overlay' as const};
+    f.hooks.decision=async input=>{history=input.request.context.history;return {status:'selected',choiceId:'op_0',latencyMs:0};};
+    f.hooks.commit=async()=>{commits++;if(commits===1)throw new PilotError('target_obscured',undefined,details);f.setText('Complete');return {action:{dispatch:'sent',outcome:'verified'}};};
+    const c=new RunController(),run=c.start('owner','profile','s','codex-sdk','Click Launch and wait until Complete becomes visible.',f.call,{...options,timeoutMs:2000,maxSteps:8});
+    const result=await terminal(c,run.id);assert.equal(commits,dispatch==='sent'?1:2);
+    if(dispatch==='sent')assert.equal(result.code,'action_outcome_unknown');else{assert.equal(result.status,'completed');assert.deepEqual(history[0].details,details);}
+  }
+});
 test('filter workflow waits for supplied success evidence instead of answering stale page data',async()=>{
   const field=control('s','combobox','State',{options:[{index:1,label:'Accepted',selected:false,disabled:false}]}),receipt=control('body','region','Results');const f=fixture([field,control('apply','button','Apply'),receipt]);let stage=0;
   f.hooks.read=async()=>({text:stage<2?'10 results':'3 accepted results',complete:true});

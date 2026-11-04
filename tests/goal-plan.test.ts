@@ -4,6 +4,20 @@ import {GoalPlan} from '../src/host/goal-plan.js';
 import type {TargetV2} from '../src/capabilities.js';
 const target=(id:string,kind:string,name:string,extra:Partial<TargetV2>={}):TargetV2=>({id,kind,role:kind,name,visible:true,disabled:false,readonly:false,...extra});
 const frames=(targets:TargetV2[],truncated=false)=>[{frameId:0,state:{stateVersion:'doc:s',binding:{documentId:'doc',origin:'https://fixture.test'},snapshot:{schemaVersion:2 as const,snapshotId:'s',epoch:1,origin:'https://fixture.test',path:'/',title:'fixture',targets,coverage:{scanned:targets.length,targetCount:targets.length,truncated,cursor:0,nextCursor:null},provenance:{source:'page' as const,trust:'untrusted' as const,documentToken:'token'}}}}];
+
+test('dismissal is scoped to an observed dialog; generic clickable tabs and terminal evidence are supported',()=>{
+ assert.throws(()=>new GoalPlan('Close the ad then click WEEKLY'),/outcome_required/);
+ const plan=new GoalPlan('Close the dialog then click WEEKLY until "Weekly schedule" becomes visible.');
+ const close=target('close','button','Close',{section:'Privacy choice'}),weekly=target('weekly','generic','WEEKLY',{clickable:true});
+ let page=frames([target('dialog','dialog','Privacy choice'),close,weekly,target('unrelated','button','Close')]);
+ const dismiss=plan.operations(page,false)[0];assert.equal(dismiss.action?.targetId,'close');
+ plan.record(dismiss.action!,page[0].state.snapshot.targets[3],'sent','verified');assert.equal(plan.operations(page,false)[0].action?.targetId,'close');
+ plan.record(dismiss.action!,close,'sent','unverified');page=frames([weekly]);
+ const click=plan.operations(page,false)[0];assert.equal(click.action?.targetId,'weekly');plan.record(click.action!,weekly,'sent','unverified');
+ assert.equal(plan.evaluate(page),false,'Dispatch is not terminal evidence');assert.equal(plan.pendingText(page),'Weekly schedule');
+ const noClose=new GoalPlan('Close the ad then click WEEKLY until "Weekly schedule" becomes visible.');
+ assert.throws(()=>noClose.operations(frames([target('dialog','dialog','Privacy choice'),target('consent','button','Consent',{section:'Privacy choice'}),weekly]),false),/dismiss_target_not_found/);
+});
 test('checkbox goals ground all controls and verify values without another decision',()=>{
   const plan=new GoalPlan('Check all checkboxes.');const before=frames([target('a','checkbox','Consent',{checked:false}),target('b','checkbox','Updates',{checked:true})]);
   assert.equal(plan.evaluate(before),false);assert.equal(plan.operations(before,false).length,1);

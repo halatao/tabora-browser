@@ -34,9 +34,16 @@ try{
       globalThis.setTimeout=(callback,ms,...args)=>{if(ms!==5000)return nativeSet(callback,ms,...args);const id=clock.next--;clock.events.set(id,{at:clock.now+ms,callback:()=>callback(...args)});return id;};
       globalThis.clearTimeout=id=>{clock.events.delete(id);nativeClear(id);};
     }});
-    const original=chrome.debugger.sendCommand.bind(chrome.debugger);let captures=0;
+    const original=chrome.debugger.sendCommand.bind(chrome.debugger);let captures=0,expiryAdvanced=false;
     chrome.debugger.sendCommand=async(target,method,params)=>{
-      if(method==='Page.captureScreenshot'&&++captures===2)await chrome.scripting.executeScript({target:{tabId},func:()=>globalThis.__captureTestClock.advance(5000)});
+      if(method==='Page.captureScreenshot'){
+        captures++;
+        if(globalThis.__workflowCapture===2&&!expiryAdvanced){expiryAdvanced=true;await chrome.scripting.executeScript({target:{tabId},func:()=>globalThis.__captureTestClock.advance(5000)});}
+        const result=await original(target,method,params);
+        // Force the first image to become stale, even when Chrome's viewport is stable.
+        if(captures===1)await chrome.scripting.executeScript({target:{tabId},func:()=>document.body.style.width='1100px'});
+        return result;
+      }
       return original(target,method,params);
     };
   },opened.tabId);
@@ -46,6 +53,7 @@ try{
     lastCommand=command;
     if(command==='status')return {configs:[{provider:'codex-sdk',model:'gpt-5.5',timeoutMs:30000}]};
     if(command==='workflow.capture'){
+      await worker.evaluate(index=>{globalThis.__workflowCapture=index;},captureCount+1);
       if(++captureCount===2)await worker.evaluate(tabId=>chrome.scripting.executeScript({target:{tabId},func:()=>globalThis.__captureTestClock.advance(1500)}),opened.tabId);
       const capture=await tool('browser_capture',{sessionId:session.id,...payload});const preview=await client.callTool({name:'browser_image_view',arguments:{sessionId:session.id,artifactId:capture.artifact.id}});assert(!preview.isError);const image={...JSON.parse(preview.content.find(block=>block.type==='text').text),...preview.content.find(block=>block.type==='image')};await tool('browser_files_release',{sessionId:session.id,artifactIds:[capture.artifact.id]});
       return {data:image.data,mimeType:image.mimeType,width:image.width,height:image.height,targetId:payload.targetId,stateVersion:payload.stateVersion,captureId:capture.visual.captureId,expiresAt:capture.visual.expiresAt};
@@ -63,6 +71,22 @@ try{
   for(let i=0;i<300&&controller.status('fixture',run.id).status==='running';i++)await new Promise(resolve=>setTimeout(resolve,50));
   const result=controller.status('fixture',run.id);
   assert.equal(result.status,'completed',JSON.stringify({result,lastCommand}));assert.equal(commits,1);assert.equal(decisionCount,2);assert.equal(result.trace[0].actionType,'click');assert.equal(result.trace[0].targetKind,'img');assert.equal(result.trace[0].provider,'codex-sdk');assert.equal(result.trace[0].modality,'vision');
-  assert(!JSON.stringify(result).includes('base64'));await tool('browser_session_release',{sessionId:session.id});
-  console.log(JSON.stringify({passed:true,checks:['default native backend through real extension','focusable canvas with a page-world property listener is offered and clicked natively','trusted pointer events commit exactly once','bounded clip capture preserves page layout and privacy validation','previous mask expiry cannot erase a subsequent capture','redacted capture traverses workflow and image wire envelope','explicit Jev/text + Codex/image selection recorded','completion checked after server response'],scope:'synthetic provider; real model tested separately'}));
+  assert(!JSON.stringify(result).includes('base64'));
+  await worker.evaluate(tabId=>{
+    const original=chrome.debugger.sendCommand.bind(chrome.debugger);globalThis.__unstableCaptures=0;
+    chrome.debugger.sendCommand=async(target,method,params)=>{
+      const result=await original(target,method,params);
+      if(method==='Page.captureScreenshot'){
+        globalThis.__unstableCaptures++;
+        await chrome.scripting.executeScript({target:{tabId},func:()=>document.body.style.width=(parseFloat(document.body.style.width)+1)+'px'});
+      }
+      return result;
+    };
+  },opened.tabId);
+  const fresh=await tool('browser_state',{sessionId:session.id}),body=fresh.snapshot.targets.find(target=>target.name==='Page body');
+  const rejected=await client.callTool({name:'browser_capture',arguments:{sessionId:session.id,stateVersion:fresh.stateVersion,targetId:body.id}});
+  assert(rejected.isError);assert.equal(JSON.parse(rejected.content.find(block=>block.type==='text').text).code,'capture_redaction_changed');
+  assert.equal(await worker.evaluate(()=>globalThis.__unstableCaptures),2,'Continued layout changes must stop after one retry');
+  await tool('browser_session_release',{sessionId:session.id});
+  console.log(JSON.stringify({passed:true,checks:['default native backend through real extension','focusable canvas with a page-world property listener is offered and clicked natively','trusted pointer events commit exactly once','changed capture discarded and masks recomputed once; continued changes fail closed','previous mask expiry cannot erase a subsequent capture','redacted capture traverses workflow and image wire envelope','explicit Jev/text + Codex/image selection recorded','completion checked after server response'],scope:'synthetic provider; real model tested separately'}));
 }finally{await client?.close().catch(()=>{});await context?.close();await new Promise(resolve=>fixture.close(resolve));assert.equal(path.dirname(directory),base);await rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

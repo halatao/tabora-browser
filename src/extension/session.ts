@@ -122,6 +122,13 @@ async function command(name:string,payload:any):Promise<any> {
     const input=z.object({recipe:z.enum(['click','fill','login','extract']),provider:providerId,question:z.string().min(1).max(2000),fields:z.record(z.string(),z.string().max(2000)).optional(),selectOptionIndex:z.number().int().min(0).max(39).optional(),credentialId:z.string().uuid().optional()}).strict().parse(payload);
     if(input.selectOptionIndex!==undefined&&(input.recipe!=='fill'||input.fields!==undefined))throw new PilotError('invalid_fields');
     if(input.recipe!==recipe&&recipe!=='all')throw new PilotError('observe_first');
+    // A public V2 observation can supersede the compatibility snapshot. Refresh
+    // before asking the provider, never rebase an already selected action.
+    if(binding&&snapshot&&!await capabilities.validateVersion(binding.documentId+':'+snapshot.documentToken)){
+      // An option index was supplied against the old menu; its meaning may have changed.
+      if(input.selectOptionIndex!==undefined)throw new PilotError('stale_snapshot');
+      await command('observe',{recipe});
+    }
     const request=decisionRequest(input.question,input.recipe);if(request.choices.length<2)throw new PilotError('no_candidates');
     const run=generation;busy=true;pending=undefined;
     try {
@@ -137,6 +144,11 @@ async function command(name:string,payload:any):Promise<any> {
   if(name==='manual') {
     const input=z.object({recipe:z.enum(['click','fill','login','extract']),targetId:z.string(),fields:z.record(z.string(),z.string().max(2000)).optional(),selectOptionIndex:z.number().int().min(0).max(39).optional(),credentialId:z.string().uuid().optional()}).strict().parse(payload);
     if(input.selectOptionIndex!==undefined&&(input.recipe!=='fill'||input.fields!==undefined))throw new PilotError('invalid_fields');
+    const observed=binding&&!snapshot?await capabilities.observedTarget(input.targetId):undefined;
+    if(observed){
+      if(input.selectOptionIndex!==undefined)throw new PilotError('stale_snapshot');
+      const run=generation,result=await compatibility.observeForTarget(input.recipe,input.targetId,observed);if(run!==generation||closed)throw new PilotError('cancelled');snapshot=result.snapshot;recipe=input.recipe;
+    }
     if(input.recipe!==recipe&&recipe!=='all')throw new PilotError('observe_first');
     if(!binding||!snapshot||!snapshot.targets.some(t=>t.id===input.targetId))throw new PilotError('observe_first');
     pending={id:crypto.randomUUID(),expires:Date.now()+60000,plan:{binding,snapshot,recipe:input.recipe,targetId:input.targetId,fields:input.fields,selectOptionIndex:input.selectOptionIndex,credentialId:input.credentialId}};
