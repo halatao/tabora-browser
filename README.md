@@ -43,6 +43,14 @@ Coverage depends on the page and operation. See the [capability matrix](docs/cap
 
 **Standalone preview:** Windows x64 ZIP packages include their own runtime and `tabora.exe install`; end users do not need Git or Node. Check [preview releases](https://github.com/halatao/tabora-browser/releases) for available packages. Their release manifests are signed with the public Ed25519 root embedded in Tabora. See [packaged installation, updates and release operations](docs/distribution.md). Chrome Web Store publishing and the stable Windows installer remain separate publisher gates.
 
+Download the Windows x64 ZIP, extract it and run this from the extracted folder to receive future preview updates automatically:
+
+```powershell
+.\tabora.exe install --channel preview --auto-update
+```
+
+In your Chrome/Edge profile, enable Developer mode and use **Load unpacked** once, selecting the installed `extension-unpacked` directory printed by setup. Updates verify signed releases and wait for idle tasks before replacing the host and unpacked extension. Reconnect your MCP client when requested; Chrome may require consent if permissions change. Without `--auto-update`, Tabora only notifies about updates. See [update behavior and existing installations](docs/distribution.md#automatic-preview-updates).
+
 ### Recommended: a dedicated browser profile
 
 ```powershell

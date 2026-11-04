@@ -13,10 +13,10 @@ Stable is the default update channel. `tabora.exe install --channel preview` exp
 Extract the complete Windows x64 ZIP into a temporary folder, then run:
 
 ```powershell
-.\tabora.exe install --auto-update
+.\tabora.exe install --channel preview --auto-update
 ```
 
-Git, npm and a system Node installation are not needed. `--auto-update` opts into verified stable updates between tasks; omitting it selects notifications only. Effective remote availability also requires a configured public release key. SDK authentication is separate; MCP browser control needs no paid model call.
+Git, npm and a system Node installation are not needed. This command explicitly opts into signed preview updates and automatic installation between tasks. Use `--channel stable` for stable-only releases; preview releases are not published as GitHub's stable latest release. Omitting `--auto-update` selects notifications only. Effective remote availability also requires a configured public release key. SDK authentication is separate; MCP browser control needs no paid model call.
 
 Advanced installation flags keep everyday UI unchanged: `--notify-only` permits checks without automatic installation, and `--no-updates` disables new remote checks/prepares and remote apply for the shared host. Explicit offline installer upgrades remain possible. Re-running the installed `install` command with one of these flags changes that policy without resetting profile settings.
 
@@ -29,6 +29,18 @@ For ordinary Chrome/Edge, enable Developer mode and use Load unpacked once with 
 ```
 
 The EXE installer uses the same payload and per-user registration. Its definition is `installer/tabora.iss`; compiling it requires Inno Setup and stable publication requires an Authenticode certificate. ZIP-only preview publication skips the compiler entirely and signs its exact release manifest using Ed25519. No self-signed Windows certificate is substituted for a publisher certificate.
+
+### Automatic preview updates
+
+For an existing standalone installation, enable preview updates without resetting browser-profile or vault settings:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\TaboraBrowser\tabora.exe" install --channel preview --auto-update
+```
+
+This changes update policy; it is not proof that a newer version has already been installed. While the broker is running, automatic checks start after 30 seconds and repeat every six hours. The updater verifies signed metadata, artifact hashes and the packaged file inventory, stages the release and waits for maintenance readiness before activation. The unpacked extension reloads through its existing maintenance connection; Store-managed extension code is updated by Chrome instead.
+
+An existing MCP process still needs to reconnect to load the new server version. Missing browser connections, changed permissions or unsupported older maintenance components can require user action. Inspect update status and run `doctor --require-profile` after reconnect; do not equate `scheduled` or downloaded files with a completed update. Automatic updates do not run while the broker is stopped.
 
 Managed Chromium is an optional download:
 
