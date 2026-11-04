@@ -6,6 +6,7 @@
 | --- | --- |
 | Product | Tabora Browser |
 | Publisher display name | Tabora Browser |
+| Store publisher ID | `0aa43023-1eb2-4102-8318-a94e93e58fbe` |
 | Account holder | Ondřej Halata; name confirmed by connected Google profile |
 | Developer/contact email | ondrej@halatao.cz; connected Gmail account matches |
 | Homepage | https://github.com/halatao/tabora-browser |
@@ -15,8 +16,8 @@
 | Existing unpacked extension ID | `kenmodennegnggpghfmlpbbdfomadfdc` |
 | Store item ID / public key | Not yet obtained from the publisher dashboard |
 | Privacy policy | [Published policy](https://github.com/halatao/tabora-browser/blob/main/docs/privacy.md) |
-| DSA trader status / legal address | Owner decision and verification required; do not infer these from the project being free or open source |
-| Account registration/payment status | Authenticated on 4 November 2026; dashboard requires developer agreement acceptance and a one-time USD 5 registration fee. Neither has been completed. |
+| DSA trader status / legal address | Mandatory trader-status dialog is pending the owner's answer; legal address is not entered. Do not infer these from the project being free or open source. |
+| Account registration/payment status | Completed on 4 November 2026 with the owner's explicit approval of the developer agreement and USD 5 total fee; the dashboard confirmed successful registration. |
 
 ## Listing text
 
