@@ -24,12 +24,12 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
       const identity=(target:TargetV2)=>JSON.stringify([target.kind,target.name,target.href,target.secret,target.inputType,target.inputPurpose,target.formId]);
       if(!fresh||identity(fresh)!==identity(expected))throw new PilotError('stale_snapshot');
     }
-    const result:PageTarget[]=[];
+    const result:PageTarget[]=[],formIds=new Set(targets.filter(target=>target.kind==='form').map(target=>target.id));
     for(const target of targets){
       let projected:PageTarget|undefined;
       if(target.kind==='form'&&(kind!=='login'||targets.some(t=>t.formId===target.id&&t.secret&&t.inputPurpose!=='one-time-code')))projected={id:target.id,kind:'form',name:target.name,fields:targets.filter(t=>t.formId===target.id&&['textbox','combobox','spinbutton'].includes(t.kind)).map(t=>t.name),contains:targets.filter(t=>t.formId===target.id&&t.kind==='button').map(t=>t.name)};
       else if(target.kind==='combobox'&&target.options)projected={id:target.id,kind:'select',name:target.name,options:target.options.map(o=>({...o,placeholder:!o.label})),disabled:target.disabled};
-      else if(['textbox','spinbutton'].includes(target.kind)&&!target.secret&&!target.readonly)projected={id:target.id,kind:'field',name:target.name,fields:[target.name],disabled:target.disabled};
+      else if(['textbox','spinbutton'].includes(target.kind)&&!target.secret&&!target.readonly&&(!target.formId||!formIds.has(target.formId)))projected={id:target.id,kind:'field',name:target.name,fields:[target.name],disabled:target.disabled};
       else if(['checkbox','radio','switch'].includes(target.kind))projected={id:target.id,kind:target.kind==='radio'?'radio':target.kind==='switch'?'switch':'checkbox',name:target.name,checked:target.checked,disabled:target.disabled||target.readonly};
       else if(['link','button','tab'].includes(target.kind)||target.clickable)projected={id:target.id,kind:target.kind==='link'?'link':'button',name:target.name,href:target.href?new URL(target.href).pathname+new URL(target.href).search:undefined,contains:target.contains,containsTruncated:target.containsTruncated,expanded:target.expanded};
       else if(['table','grid'].includes(target.kind)){const read=await table(target.id,6);projected={id:target.id,kind:'table',name:read.rows[0]?.join(' | ')??target.name,preview:read.rows,previewTruncated:read.truncated,section:target.section};}

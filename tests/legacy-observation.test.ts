@@ -45,6 +45,12 @@ test('legacy click menus retain checkbox semantics and checked state',async()=>{
   const observed=await f.api.operation({op:'observe',kind:'click'});
   assert.deepEqual(observed.snapshot.targets,[{id:'consent',kind:'checkbox',name:'Consent',checked:false,disabled:false,section:undefined}]);
 });
+test('fields already covered by an observed form are not duplicated in legacy menus',async()=>{
+  const f=fixture([target('form','form','Contact'),{...target('inside','textbox','Name'),formId:'form'},target('outside','textbox','Notes')]);
+  const observed=await f.api.operation({op:'observe',kind:'fill'});
+  assert.deepEqual(observed.snapshot.targets.map((t:any)=>[t.id,t.kind]),[['form','form'],['outside','field']]);
+  assert.deepEqual(observed.snapshot.targets[0].fields,['Name']);
+});
 test('standalone fields can be filled by exact identity even when names repeat',async()=>{
   const f=fixture([target('r1','textbox','Name'),target('r2','textbox','Name'),{...target('r3','textbox','Password'),secret:true}]);
   const observed=await f.api.operation({op:'observe',kind:'fill'});
