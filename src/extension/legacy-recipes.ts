@@ -1,18 +1,21 @@
 import {PilotError,type Snapshot,type PageTarget} from '../shared.js';
 import type {TargetV2,BrowserAction} from '../capabilities.js';
 
-export type RecipeInput={op:'cancel'}|{op:'observe';kind:'click'|'fill'|'login'|'extract'|'all'}|{op:'wait';version:string;timeoutMs:number}|{op:'execute';origin:string;token:string;targetId:string;recipe:'click'|'fill'|'login'|'extract';fields?:Record<string,string>;selectOptionIndex?:number;credentialId?:string};
+export type RecipeInput={op:'cancel'}|{op:'observe';kind:'click'|'fill'|'login'|'extract'|'all';cursor?:string}|{op:'wait';version:string;timeoutMs:number}|{op:'execute';origin:string;token:string;targetId:string;recipe:'click'|'fill'|'login'|'extract';fields?:Record<string,string>;selectOptionIndex?:number;credentialId?:string};
 /** Public recipe compatibility is translation over V2, never a second page executor. */
 export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
   let state:any;
   const versions=new Map<string,TargetV2[]>();
+  let menu:{kind:string;cursor:string;offset:number;signature:string;documentToken:string}|undefined;
   async function table(targetId:string,maximum:number){
     let offset=0,revision:string|undefined;const rows:string[][]=[];let result:any;
     do{result=await call('read',{frameId:0,targetId,format:'rows',offset,limit:Math.min(100,maximum-rows.length),revision});revision??=result.revision;rows.push(...result.rows);if(result.nextOffset===null)break;if(result.nextOffset<=offset)throw new PilotError('reader_no_progress');offset=result.nextOffset;}while(rows.length<maximum);
     const truncation={rows:(result.totalRows??rows.length)>maximum||result.nextOffset!==null,columns:rows.some(row=>row.length>30),cells:rows.some(row=>row.slice(0,30).some(cell=>cell.length>120))};
     return {ok:true,rows:rows.slice(0,maximum).map(row=>row.slice(0,30).map(cell=>cell.slice(0,120))),truncation,truncated:!result.complete||Object.values(truncation).some(Boolean),rowCount:result.totalRows??rows.length};
   }
-  async function observe(kind:string,focusId?:string,expected?:TargetV2){
+  async function observe(kind:string,focusId?:string,expected?:TargetV2,cursor?:string){
+    const continuation=cursor?menu:undefined;
+    if(cursor&&(!continuation||continuation.cursor!==cursor||continuation.kind!==kind))throw new PilotError('stale_continuation');
     state=await call('state',{frameId:0,cursor:0,limit:100});const targets:TargetV2[]=[...state.snapshot.targets];
     for(let page=1;state.snapshot.coverage.nextCursor!==null&&page<10;page++){state=await call('state',{frameId:0,cursor:state.snapshot.coverage.nextCursor,limit:100});targets.push(...state.snapshot.targets);}
     versions.clear();versions.set(state.snapshot.snapshotId,targets);
@@ -26,18 +29,24 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
       let projected:PageTarget|undefined;
       if(target.kind==='form'&&(kind!=='login'||targets.some(t=>t.formId===target.id&&t.secret&&t.inputPurpose!=='one-time-code')))projected={id:target.id,kind:'form',name:target.name,fields:targets.filter(t=>t.formId===target.id&&['textbox','combobox','spinbutton'].includes(t.kind)).map(t=>t.name),contains:targets.filter(t=>t.formId===target.id&&t.kind==='button').map(t=>t.name)};
       else if(target.kind==='combobox'&&target.options)projected={id:target.id,kind:'select',name:target.name,options:target.options.map(o=>({...o,placeholder:!o.label})),disabled:target.disabled};
+      else if(['textbox','spinbutton'].includes(target.kind)&&!target.secret&&!target.readonly)projected={id:target.id,kind:'field',name:target.name,fields:[target.name],disabled:target.disabled};
+      else if(['checkbox','radio','switch'].includes(target.kind))projected={id:target.id,kind:target.kind==='radio'?'radio':target.kind==='switch'?'switch':'checkbox',name:target.name,checked:target.checked,disabled:target.disabled||target.readonly};
       else if(['link','button','tab'].includes(target.kind)||target.clickable)projected={id:target.id,kind:target.kind==='link'?'link':'button',name:target.name,href:target.href?new URL(target.href).pathname+new URL(target.href).search:undefined,contains:target.contains,containsTruncated:target.containsTruncated,expanded:target.expanded};
       else if(['table','grid'].includes(target.kind)){const read=await table(target.id,6);projected={id:target.id,kind:'table',name:read.rows[0]?.join(' | ')??target.name,preview:read.rows,previewTruncated:read.truncated,section:target.section};}
       else if(target.kind==='file')projected={id:target.id,kind:'file',name:target.name,accept:target.accept,multiple:target.multiple};
       else if(target.name==='Page body')projected={id:target.id,kind:'text',name:'Obsah stránky'};
-      if(projected&&(kind==='all'||kind==='extract'&&['table','text'].includes(projected.kind)||kind==='click'&&['link','button'].includes(projected.kind)||kind==='fill'&&['form','select'].includes(projected.kind)||kind==='login'&&projected.kind==='form')){projected.section??=target.section;result.push(projected);}
+      if(projected&&(kind==='all'||kind==='extract'&&['table','text'].includes(projected.kind)||kind==='click'&&['link','button','checkbox','radio','switch'].includes(projected.kind)||kind==='fill'&&['form','field','select'].includes(projected.kind)||kind==='login'&&projected.kind==='form')){projected.section??=target.section;result.push(projected);}
     }
     // Legacy recipe menus place the whole-page reader after concrete targets.
     result.sort((a,b)=>Number(a.kind==='text')-Number(b.kind==='text'));
     if(focusId){const index=result.findIndex(target=>target.id===focusId);if(index<0)throw new PilotError('wrong_target_kind');result.unshift(...result.splice(index,1));}
+    const signature=JSON.stringify(result),documentToken=state.snapshot.provenance.documentToken;
+    if(continuation&&(continuation.signature!==signature||continuation.documentToken!==documentToken))throw new PilotError('stale_continuation');
+    const offset=continuation?.offset??0,next=offset+48<result.length?crypto.randomUUID():undefined;
+    menu=next?{kind,cursor:next,offset:offset+48,signature,documentToken}:undefined;
     const body=targets.find(t=>t.name==='Page body');const text=body?(await call('read',{frameId:0,targetId:body.id,format:'text',offset:0,limit:3200})).text:'';
-    const snapshot:Snapshot={origin:state.snapshot.origin,path:state.snapshot.path,title:state.snapshot.title,documentToken:state.snapshot.snapshotId,pageVersion:state.snapshot.dataVersion,dataVersion:state.snapshot.dataVersion,text,targets:result.slice(0,48),truncated:state.snapshot.coverage.truncated||result.length>48};
-    return {ok:true,snapshot,limitations:{limit:48,truncated:snapshot.truncated}};
+    const snapshot:Snapshot={origin:state.snapshot.origin,path:state.snapshot.path,title:state.snapshot.title,documentToken:state.snapshot.snapshotId,stateVersion:state.stateVersion,pageVersion:state.snapshot.dataVersion,dataVersion:state.snapshot.dataVersion,text,targets:result.slice(offset,offset+48),truncated:state.snapshot.coverage.truncated||!!next};
+    return {ok:true,snapshot,stateVersion:state.stateVersion,nextCursor:next??null,limitations:{limit:48,truncated:snapshot.truncated,scanTruncated:state.snapshot.coverage.nextCursor!==null}};
   }
   async function commit(action:BrowserAction){
     let result:any;
@@ -48,8 +57,8 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
     state=result.snapshot?result:await call('state',{frameId:0,cursor:0,limit:100});return result;
   }
   return {observeForTarget:observe,async operation(input:RecipeInput):Promise<any>{
-    if(input.op==='cancel'){state=undefined;versions.clear();return {ok:true};}
-    if(input.op==='observe')return observe(input.kind);
+    if(input.op==='cancel'){state=undefined;menu=undefined;versions.clear();return {ok:true};}
+    if(input.op==='observe')return observe(input.kind,undefined,undefined,input.cursor);
     if(input.op==='wait'){
       const deadline=performance.now()+input.timeoutMs;
       do{const fresh=await call('state',{frameId:0,cursor:0,limit:100});if(fresh.snapshot.dataVersion!==input.version)return {ok:true,changed:true};await new Promise(r=>setTimeout(r,80));}while(performance.now()<deadline);
@@ -66,7 +75,7 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
     if(input.selectOptionIndex!==undefined){if(target.kind!=='combobox'||!target.options?.some(o=>o.index===input.selectOptionIndex&&!o.disabled))throw new PilotError('invalid_option');await commit({type:'select',targetId:target.id,indices:[input.selectOptionIndex]});return {ok:true,filled:1,verified:true,submitted:false};}
     if(!input.fields||!Object.keys(input.fields).length)throw new PilotError('invalid_fields');
     const writes=Object.entries(input.fields).map(([name,value])=>{
-      const matches=targets!.filter(t=>t.formId===target.id&&t.name===name&&!t.secret&&!t.disabled&&!t.readonly&&['textbox','combobox','spinbutton'].includes(t.kind));
+      const matches=targets!.filter(t=>(t.formId===target.id||t.id===target.id)&&t.name===name&&!t.secret&&!t.disabled&&!t.readonly&&['textbox','combobox','spinbutton'].includes(t.kind));
       if(matches.length!==1)throw new PilotError('ambiguous_field');return {target:matches[0],value};
     });
     let filled=0;

@@ -49,7 +49,7 @@ export class DecisionPool {
     const runtime={coldStart:false,setupMs:0,dispatchMs:0,cleanupMs:0};
     const metadata=()=>({requestId:request.requestId,stateVersion:request.stateVersion,provider:config.provider,model:config.model,latencyMs:Math.round(performance.now()-start),runtime:{...runtime}});
     if(config.provider==='openai-decisions')return {...metadata(),status:'failed',code:'decisions_preview_unavailable'};
-    if(!config.model)return {...metadata(),status:'failed',code:'missing_model'};
+    if(!config.model)return {...metadata(),status:'failed',code:'missing_model',nextStep:'Use browser_provider_status and browser_provider_models for this provider, then explicitly configure a returned model ID with browser_provider_configure. Host model settings affect all profiles; no model or provider was substituted.'};
     if(signal.aborted)return {...metadata(),status:'failed',code:'cancelled'};
     if(this.pending.has(scope))return {...metadata(),status:'failed',code:'session_busy'};
     this.pending.add(scope);
