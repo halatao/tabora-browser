@@ -1,19 +1,31 @@
 import type {BrowserAction} from '../capabilities.js';
-import {ancestor,scrollContainer} from './semantic.js';
+import {ancestor,scrollContainer,controlLabel} from './semantic.js';
 import {Registry} from './registry.js';
 import {ready,waitExposedPoint} from './actionability.js';
 import {editorRange,editorText} from './editor.js';
 
+function writeField(el:HTMLInputElement|HTMLTextAreaElement,value:string){
+  if(el instanceof HTMLInputElement&&['password','file','hidden','checkbox','radio','button','submit','reset'].includes(el.type))throw new Error('sensitive_or_unsupported_field');
+  const previous=el.value,prototype=el instanceof HTMLInputElement?HTMLInputElement.prototype:HTMLTextAreaElement.prototype,setter=Object.getOwnPropertyDescriptor(prototype,'value')?.set;
+  if(!setter)throw new Error('unsupported_field');
+  setter.call(el,value);
+  if(el.value!==value||!el.validity.valid){setter.call(el,previous);throw new Error('invalid_field_value');}
+  el.dispatchEvent(new Event('input',{bubbles:true,composed:true}));el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+  if(!el.isConnected||el.value!==value)return {dispatch:'sent',outcome:'unknown',code:'verification_failed'};
+  return {dispatch:'sent',outcome:'verified',value:el.value};
+}
+
 export async function domAction(registry:Registry,action:BrowserAction,allowedOrigins:string[]=[]):Promise<Record<string,unknown>>{
   const entry=registry.resolve(action.targetId,true),el=entry.el;if(['fill','replace','check','select'].includes(action.type)&&(ancestor(el,'[data-private],[data-sensitive]')||entry.target.secret||['current-password','new-password','one-time-code'].includes(el.getAttribute('autocomplete')?.trim().split(/\s+/).at(-1)??'')))throw new Error('sensitive_or_unsupported_field');
-  if(!['click','check'].includes(action.type))ready(el,['fill','replace'].includes(action.type));
+  if((['click','check'].includes(action.type)||action.type==='key'&&['Space','Enter'].includes(action.key))&&el.matches('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"],[role="switch"]')&&el.getAttribute('aria-readonly')==='true')throw new Error('field_readonly');
+  if(!['click','check'].includes(action.type))ready(el,['fill','replace','select'].includes(action.type));
   if(action.type==='navigate'){if(!(el instanceof HTMLAnchorElement))throw new Error('wrong_target_kind');const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin&&!allowedOrigins.includes(url.origin))throw new Error('navigation_out_of_scope');location.assign(url.href);return {dispatch:'sent',outcome:'unverified',backend:'browser_navigation'};}
   if(action.type==='click'){
     if(action.backend!=='dom')throw new Error('native_backend_required');
     await waitExposedPoint(()=>registry.resolve(action.targetId,true).el);
     if(el instanceof HTMLAnchorElement){const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==location.origin&&!allowedOrigins.includes(url.origin))throw new Error('navigation_out_of_scope');}
     if(!(el instanceof HTMLElement))throw new Error('native_backend_required');
-    el.click();return {dispatch:'sent',outcome:'unverified'};
+    (controlLabel(el)??el).click();return {dispatch:'sent',outcome:'unverified'};
   }
   if(action.type==='scroll'){
     const scrolling=scrollContainer(el),before={x:scrolling.scrollLeft,y:scrolling.scrollTop};scrolling.scrollBy({left:action.x,top:action.y,behavior:'instant'});
@@ -24,7 +36,7 @@ export async function domAction(registry:Registry,action:BrowserAction,allowedOr
     if(!(el instanceof HTMLInputElement)||!['checkbox','radio'].includes(el.type))throw new Error('native_backend_required');
     if(el.checked===action.checked&&!el.indeterminate)return {dispatch:'not_needed',outcome:'verified',checked:el.checked};
     if(el.type==='radio'&&!action.checked)throw new Error('unsupported_radio_uncheck');
-    await waitExposedPoint(()=>registry.resolve(action.targetId,true).el);el.click();if(el.checked!==action.checked||el.indeterminate)return {dispatch:'sent',outcome:'failed',code:'verification_failed'};
+    await waitExposedPoint(()=>registry.resolve(action.targetId,true).el);registry.resolve(action.targetId,true);(controlLabel(el)??el).click();if(el.checked!==action.checked||el.indeterminate)return {dispatch:'sent',outcome:'failed',code:'verification_failed'};
     return {dispatch:'sent',outcome:'verified',checked:el.checked};
   }
   if(action.type==='select'){
@@ -40,16 +52,13 @@ export async function domAction(registry:Registry,action:BrowserAction,allowedOr
   if(action.type==='fill'){
     if(action.backend==='native')throw new Error('native_backend_required');
     if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement))throw new Error('wrong_target_kind');
-    if(el instanceof HTMLInputElement&&['password','file','hidden','checkbox','radio','button','submit','reset'].includes(el.type))throw new Error('sensitive_or_unsupported_field');
-    const previous=el.value,prototype=el instanceof HTMLInputElement?HTMLInputElement.prototype:HTMLTextAreaElement.prototype,setter=Object.getOwnPropertyDescriptor(prototype,'value')?.set;
-    if(!setter)throw new Error('unsupported_field');
-    setter.call(el,action.value);
-    if(el.value!==action.value||!el.validity.valid){setter.call(el,previous);throw new Error('invalid_field_value');}
-    el.dispatchEvent(new Event('input',{bubbles:true,composed:true}));el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
-    if(!el.isConnected||el.value!==action.value)return {dispatch:'sent',outcome:'unknown',code:'verification_failed'};
-    return {dispatch:'sent',outcome:'verified',value:el.value};
+    return writeField(el,action.value);
   }
   if(action.type==='replace'){
+    if(el instanceof HTMLTextAreaElement||el instanceof HTMLInputElement&&['text','email','search','tel','url'].includes(el.type)){
+      if(action.end>el.value.length)throw new Error('invalid_range');
+      return writeField(el,el.value.slice(0,action.start)+action.text+el.value.slice(action.end));
+    }
     if(!(el instanceof HTMLElement)||!el.isContentEditable)throw new Error('wrong_target_kind');
     const {range,value}=editorRange(el,action.start,action.end);
     el.focus();const selection=document.getSelection();selection?.removeAllRanges();selection?.addRange(range);

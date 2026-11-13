@@ -1,6 +1,6 @@
 import {actionSchema,outcomePredicate,observationDiff,type ObservationV2,type TargetV2} from '../capabilities.js';
 import {Registry} from './registry.js';
-import {accessibleName,ancestor,composedElements,content,description,role,section,shadowRoot,visible,PAGE_SCAN_LIMIT,scrollContainer} from './semantic.js';
+import {accessibleName,ancestor,composedElements,content,description,role,section,shadowRoot,visible,controlLabel,PAGE_SCAN_LIMIT,scrollContainer} from './semantic.js';
 import {reader,type ReadInput} from './reader.js';
 import {domAction} from './controls.js';
 import {exposedPoint,waitExposedPoint,ready,ExposureError} from './actionability.js';
@@ -55,6 +55,7 @@ function describe(el:Element):Omit<TargetV2,'id'>{
   const inputPurpose=['username','current-password','new-password','one-time-code'].includes(purpose??'')?purpose as TargetV2['inputPurpose']:undefined;
   const r=role(el),type=el instanceof HTMLInputElement?el.type:el instanceof HTMLTextAreaElement?'textarea':undefined,secret=!!ancestor(el,'[data-private],[data-sensitive]')||type==='password'||['current-password','new-password','one-time-code'].includes(inputPurpose??'');
   const target:Omit<TargetV2,'id'>={kind:r,role:r,name:accessibleName(el),description:description(el),section:section(el),visible:visible(el),disabled:el.matches(':disabled')||el.getAttribute('aria-disabled')==='true'||!!ancestor(el,'[inert]'),readonly:el.getAttribute('aria-readonly')==='true'||!!(el as HTMLInputElement).readOnly,inputType:type,inputPurpose,secret:secret||undefined};
+  if(controlLabel(el)){target.visible=true;target.interactionSurface='label';}
   // Page-world JavaScript listeners are not inspectable from the isolated sensor.
   // An explicit nonnegative tabindex is a shared DOM interaction hint for visual controls.
   const focusableVisual=['img','generic','region'].includes(r)&&el.hasAttribute('tabindex')&&(el as HTMLElement).tabIndex>=0;
@@ -77,6 +78,7 @@ function describe(el:Element):Omit<TargetV2,'id'>{
   }
   return target;
 }
+function geometry(el:Element){const rect=(controlLabel(el)??el).getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height,viewportWidth:innerWidth,viewportHeight:innerHeight};}
 world.__taboraOperation=async(input:SensorInput)=>{
   try{
     if(input.origin!==globalThis.origin||!/^https?:\/\//.test(globalThis.origin))throw new Error('stale_binding');
@@ -154,7 +156,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
       const el=registry.resolve(lease.action.targetId,!input.release).el;if(writeIdentity(el)!==lease.identity)throw new Error('stale_reference');if(input.release)return {ok:true};ready(el);if(input.op==='native_finish'){state.native=undefined;return {ok:true,checked:el instanceof HTMLInputElement?el.checked:el.getAttribute('aria-checked')==='true',value:el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement?el.value:undefined};}
       if(lease.focus&&activeElement()!==lease.focus)throw new Error('focus_lost');
       if(el instanceof HTMLInputElement&&el.type==='password')throw new Error('sensitive_or_unsupported_field');
-      const point=exposedPoint(el,lease.action.type==='image_click'?lease.point:undefined);if(Math.abs(point.x-lease.point.x)>2||Math.abs(point.y-lease.point.y)>2)throw new Error('target_moved');
+      const point=exposedPoint(el,lease.action.type==='image_click'?lease.point:undefined);if(Math.abs(point.x-lease.point.x)>2||Math.abs(point.y-lease.point.y)>2)throw new ExposureError('target_moved',{blockers:[],cause:'geometry_unstable',geometryStage:'input_validation',geometry:geometry(el),pointDelta:{...point,previousX:lease.point.x,previousY:lease.point.y},nextStep:'observe'});
       return {ok:true};
     }
     if(input.op==='observe'){
@@ -184,7 +186,7 @@ world.__taboraOperation=async(input:SensorInput)=>{
       registry.prune();const next=seen>cursor+targets.length?cursor+targets.length:null;
       let data='';try{data=content(document.body,32000);}catch(error){if(error instanceof Error&&error.message==='reader_size_limit')metadataTruncated=true;else throw error;}let hash=2166136261;for(let index=0;index<data.length;index++)hash=Math.imul(hash^data.charCodeAt(index),16777619);
       const snapshot:ObservationV2={schemaVersion:2,snapshotId:crypto.randomUUID(),epoch:registry.epoch,dataVersion:String(hash>>>0),origin:globalThis.origin,path:location.pathname,title:document.title.slice(0,500),targets,coverage:{scanned:scan.elements.length,targetCount:targets.length,truncated:scan.truncated||next!==null,cursor,nextCursor:next},provenance:{source:'page',trust:'untrusted',documentToken:registry.token}};
-      const sequence=candidates.filter(el=>visible(el)||el instanceof HTMLInputElement&&el.type==='file').map(el=>registry.reference(el)).join(',');
+      const sequence=candidates.filter(el=>visible(el)||controlLabel(el)||el instanceof HTMLInputElement&&el.type==='file').map(el=>registry.reference(el)).join(',');
       const previous=cursor===0&&input.baseSnapshotId?registry.snapshots.get(input.baseSnapshotId):undefined,continuationOf=registry.save(snapshot,sequence);
       snapshot.coverage.truncated ||= metadataTruncated;return {ok:true,snapshot:previous?observationDiff(previous,snapshot):snapshot,fullSnapshot:!previous,continuationOf,timings:{sensorMs:Math.round(performance.now()-started),treeCacheHit:scan.cached,semanticHits}};
     }
@@ -201,6 +203,8 @@ world.__taboraOperation=async(input:SensorInput)=>{
     registry.snapshots.delete(baseline.snapshotId);
     if(input.op==='native_prepare'){
       const el=registry.resolve(action.targetId,true).el;
+      if(action.type==='key'&&['Enter','Space','Backspace','Delete'].includes(action.key)&&el.getAttribute('aria-readonly')==='true')throw new Error('field_readonly');
+      if((['click','check'].includes(action.type)||action.type==='key'&&['Space','Enter'].includes(action.key))&&el.matches('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"],[role="switch"]')&&el.getAttribute('aria-readonly')==='true')throw new Error('field_readonly');
       if(el instanceof HTMLInputElement&&['password','file'].includes(el.type)||ancestor(el,'[data-private],[data-sensitive]')||['current-password','new-password','one-time-code'].includes(el.getAttribute('autocomplete')?.trim().split(/\s+/).at(-1)??''))throw new Error('sensitive_or_unsupported_field');
       if(el instanceof HTMLAnchorElement){const url=new URL(el.href);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.origin!==globalThis.origin&&!input.allowedOrigins?.includes(url.origin))throw new Error('navigation_out_of_scope');}
       if(action.type==='check'){
@@ -210,11 +214,16 @@ world.__taboraOperation=async(input:SensorInput)=>{
         if(!action.checked&&el.matches('input[type="radio"],[role="radio"]'))throw new Error('unsupported_radio_uncheck');
       }
       if(action.type==='image_click'&&(!input.visual||JSON.stringify(rectangle(el))!==input.visual.rect))throw new Error('stale_capture');
-      const point=await waitExposedPoint(()=>registry.resolve(action.targetId,true).el,action.type==='image_click'?input.visual!.point:undefined);
-      const initial=el.getBoundingClientRect();await renderFrames(1500,true);registry.resolve(action.targetId,true);ready(el);
-      const final=el.getBoundingClientRect();if(['x','y','width','height'].some(key=>Math.abs((initial as any)[key]-(final as any)[key])>1))throw new Error('target_moved');
       if(action.type==='key'){if(!(el instanceof HTMLElement))throw new Error('wrong_target_kind');const focus=ownedCombobox(el)??el;focus.focus();if(activeElement()!==focus)throw new Error('focus_failed');}
       if(action.type==='fill'){if(!(el instanceof HTMLTextAreaElement)&&!(el instanceof HTMLInputElement&&['text','email','search','tel','url'].includes(el.type)))throw new Error('unsupported_native_field');ready(el,true);el.focus();el.select();if(activeElement()!==el)throw new Error('focus_failed');}
+      let initial=geometry(el),final=initial,stable=false;
+      for(let attempt=0;attempt<8;attempt++){
+        await renderFrames(1500,true);registry.resolve(action.targetId,true);ready(el);final=geometry(el);
+        if(['x','y','width','height'].every(key=>Math.abs(initial[key as keyof typeof initial]-final[key as keyof typeof final])<=1)){stable=true;break;}
+        if(attempt<7)initial=final;
+      }
+      if(!stable)throw new ExposureError('target_moved',{blockers:[],cause:'geometry_unstable',geometryStage:'settle',geometry:final,previousGeometry:initial,attempts:8,nextStep:'observe'});
+      const point=await waitExposedPoint(()=>registry.resolve(action.targetId,true).el,action.type==='image_click'?input.visual!.point:undefined);
       const destination=action.type==='drag'?await waitExposedPoint(()=>registry.resolve(action.destinationId,true).el):undefined;
       registry.resolve(action.targetId,true);ready(el);
       state.native={id:crypto.randomUUID(),action,expires:Date.now()+15000,point,identity:writeIdentity(el),focus:['key','fill'].includes(action.type)?activeElement()??undefined:undefined};

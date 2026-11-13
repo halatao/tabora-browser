@@ -31,6 +31,7 @@ export const capabilityResult=z.object({schemaVersion:z.literal(2),capabilities:
 export type TargetV2={
   id:string;kind:string;role:string;name:string;description?:string;section?:string;recordKey?:string;
   disabled:boolean;readonly:boolean;visible:boolean;checked?:boolean|'mixed';expanded?:boolean;selected?:boolean;
+  interactionSurface?:'label';
   value?:string;inputType?:string;inputPurpose?:'username'|'current-password'|'new-password'|'one-time-code';secret?:boolean;accept?:string;multiple?:boolean;href?:string;clickable?:boolean;draggable?:boolean;submitter?:boolean;formValid?:boolean;
   options?:{index:number;label:string;selected:boolean;disabled:boolean}[];optionCount?:number;
   rowCount?:number;columnCount?:number;totalRows?:number;virtualized?:boolean;scrollable?:boolean;scroll?:{x:number;y:number;maxX:number;maxY:number;viewportWidth?:number;viewportHeight?:number};
