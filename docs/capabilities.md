@@ -73,7 +73,7 @@ requires observing the outcome before continuing; it never authorizes a replay.
 
 Actions: DOM/native click; exact observed-link navigation; field fill; desired
 checkbox/radio state; native select by observed indices; bounded scroll; native
-hover and enumerated keys; contenteditable text-range replacement; trusted HTML
+hover and enumerated keys; text-range replacement in supported text inputs, textareas and contenteditable regions; trusted HTML
 drag/drop; and capture-bound image coordinates. General JavaScript, raw CDP and
 unobserved selectors are not accepted.
 
@@ -99,9 +99,31 @@ geometry exchange; rotated or unsupported geometry fails before input.
 
 Custom widgets use ARIA state and observed options, including visible proxy shells
 for hidden named combobox inputs. The executor contains no site-specific selectors.
+Clipped or transparent native checkbox/radio inputs may expose `interactionSurface:
+'label'` when exactly one visible standard label belongs to that control. Their
+reference and checked/disabled state still identify the native input. Execution
+revalidates that association, checks modal/hit-test constraints and avoids links
+inside labels. Display-hidden, accessibility-hidden, inert, private, ambiguous or
+unassociated controls do not gain label access. Disabled/read-only controls remain
+blocked. Local checked/value verification does not establish form submission or
+server success.
 Rich-text edits preserve content outside the specified range. Complex editor
 layouts whose rendered offsets cannot be mapped exactly are refused; this is not
 a complete ProseMirror/CKEditor editing API.
+
+Use the returned `stateVersion` from `browser_state`, `browser_observe` or a prepared
+action as an opaque value for capture and execution. Legacy `pageVersion` is a
+content hash and is not an action version. Reattach invalidates earlier refs;
+observe the new binding before reading or writing. Stale-state diagnostics direct
+the caller to observe again without authorizing replay. `target_moved` includes
+the geometry stage, rectangles or point deltas when available; movement is checked
+before dispatch and continuously moving targets are refused.
+
+`npm run test:form-controls` uses a disposable extension without native messaging
+and a real controlled React fixture. It covers label proxies, forbidden hidden
+controls, range edits, overlays, changing geometry, stale user edits, inactive-tab
+native input, observation/action compatibility, redacted capture and menus larger
+than 48 targets without modifying the installed host or ordinary browser profiles.
 
 ## Native input and images
 

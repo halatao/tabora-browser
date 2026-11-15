@@ -7,6 +7,11 @@ import {DecisionPool} from '../src/host/providers.js';
 import {type ProviderConfig,type DecisionRequest} from '../src/shared.js';
 const config:ProviderConfig={provider:'codex-sdk',model:'fixture',connection:'sdk',timeoutMs:5000};
 const request:DecisionRequest={requestId:'test',stateVersion:'document',question:'Choose',context:{},choices:[{id:'a',description:'A'},{id:'b',description:'B'}]};
+test('missing model returns configuration guidance without starting a provider worker',async()=>{
+  const pool=new DecisionPool('unused-fixture-directory');
+  try{const result=await pool.decide('fixture',{...config,model:''},request,'',AbortSignal.timeout(1000));assert.equal(result.code,'missing_model');assert.match(result.nextStep!,/browser_provider_models/);assert.equal(result.runtime?.coldStart,false);}
+  finally{await pool.close();}
+});
 test('pool reuses a runtime within scope, isolates profiles, replaces config and cleans directories',async()=>{
   const dir=await mkdtemp(path.join(os.tmpdir(),'tabora-pool-')),pool=new DecisionPool(dir,{workerPath:path.resolve('tests/fixtures/provider-worker.mjs')});
   try{

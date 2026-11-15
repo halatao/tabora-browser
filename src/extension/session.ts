@@ -31,10 +31,11 @@ function decisionRequest(question:string,selectedRecipe=recipe):DecisionRequest 
   const {documentToken,pageVersion,...page}=snapshot;
   return {requestId:crypto.randomUUID(),stateVersion:binding.documentId+':'+snapshot.documentToken,question,
     context:page,
-    choices:[...snapshot.targets.filter(t=>selectedRecipe==='all'||selectedRecipe==='click'?selectedRecipe==='all'||['link','button'].includes(t.kind):selectedRecipe==='extract'?['table','text'].includes(t.kind):t.kind==='form'||selectedRecipe==='fill'&&t.kind==='select').map(t=>({id:t.id,description:`${t.kind}: ${t.section? t.section+' / ':''}${t.name}`.slice(0,300)})),{id:'ask_user',description:'Insufficient information or no suitable target. Ask the user.'}]};
+    choices:[...snapshot.targets.filter(t=>selectedRecipe==='all'||selectedRecipe==='click'?selectedRecipe==='all'||['link','button','checkbox','radio','switch'].includes(t.kind):selectedRecipe==='extract'?['table','text'].includes(t.kind):t.kind==='form'||selectedRecipe==='fill'&&['field','select'].includes(t.kind)).map(t=>({id:t.id,description:`${t.kind}: ${t.section? t.section+' / ':''}${t.name}`.slice(0,300)})),{id:'ask_user',description:'Insufficient information or no suitable target. Ask the user.'}]};
 }
 async function command(name:string,payload:any):Promise<any> {
   if(name.startsWith('v2.')){
+    if(name==='v2.plan')pending=undefined;
     if(!binding&&expectedNavigation&&['v2.state','v2.frames'].includes(name)){
       const candidate=expectedNavigation;if(candidate.expires<Date.now()){expectedNavigation=undefined;throw new PilotError('no_bound_tab');}
       await validateTab(candidate.tabId);await waitForTab(candidate.tabId,3000);
@@ -114,11 +115,13 @@ async function command(name:string,payload:any):Promise<any> {
     await host('bind',binding);if(generation!==run+1||closed)throw new PilotError('cancelled');return binding;
   }
   if(name==='observe') {
+    capabilities.cancelPlan();
     const run=generation;
     recipe=z.enum(['click','fill','login','extract','all']).parse(payload?.recipe);pending=undefined;
-    const result=await inDocument({op:'observe',kind:recipe});if(run!==generation||closed)throw new PilotError('cancelled');snapshot=result.snapshot;return result;
+    const result=await inDocument({op:'observe',kind:recipe,cursor:payload?.cursor});if(run!==generation||closed)throw new PilotError('cancelled');snapshot=result.snapshot;return {...result,binding};
   }
   if(name==='decide') {
+    capabilities.cancelPlan();
     const input=z.object({recipe:z.enum(['click','fill','login','extract']),provider:providerId,question:z.string().min(1).max(2000),fields:z.record(z.string(),z.string().max(2000)).optional(),selectOptionIndex:z.number().int().min(0).max(39).optional(),credentialId:z.string().uuid().optional()}).strict().parse(payload);
     if(input.selectOptionIndex!==undefined&&(input.recipe!=='fill'||input.fields!==undefined))throw new PilotError('invalid_fields');
     if(input.recipe!==recipe&&recipe!=='all')throw new PilotError('observe_first');
@@ -138,13 +141,14 @@ async function command(name:string,payload:any):Promise<any> {
         if(!snapshot!.targets.some(t=>t.id===result.choiceId))throw new PilotError('invalid_response');
         pending={id:crypto.randomUUID(),expires:Date.now()+60000,plan:{binding:binding!,snapshot:snapshot!,recipe:input.recipe,targetId:result.choiceId!,fields:input.fields,selectOptionIndex:input.selectOptionIndex,credentialId:input.credentialId}};
       }
-      return {result,target:snapshot!.targets.find(t=>t.id===result.choiceId),canExecute:!!pending,actionId:pending?.id};
+      return {result,target:snapshot!.targets.find(t=>t.id===result.choiceId),canExecute:!!pending,actionId:pending?.id,stateVersion:snapshot!.stateVersion??binding!.documentId+':'+snapshot!.documentToken};
     } finally {busy=false;}
   }
   if(name==='manual') {
+    capabilities.cancelPlan();
     const input=z.object({recipe:z.enum(['click','fill','login','extract']),targetId:z.string(),fields:z.record(z.string(),z.string().max(2000)).optional(),selectOptionIndex:z.number().int().min(0).max(39).optional(),credentialId:z.string().uuid().optional()}).strict().parse(payload);
     if(input.selectOptionIndex!==undefined&&(input.recipe!=='fill'||input.fields!==undefined))throw new PilotError('invalid_fields');
-    const observed=binding&&!snapshot?await capabilities.observedTarget(input.targetId):undefined;
+    const observed=binding&&(!snapshot||!snapshot.targets.some(t=>t.id===input.targetId)||!await capabilities.validateVersion(snapshot.stateVersion??binding.documentId+':'+snapshot.documentToken))?await capabilities.observedTarget(input.targetId):undefined;
     if(observed){
       if(input.selectOptionIndex!==undefined)throw new PilotError('stale_snapshot');
       const run=generation,result=await compatibility.observeForTarget(input.recipe,input.targetId,observed);if(run!==generation||closed)throw new PilotError('cancelled');snapshot=result.snapshot;recipe=input.recipe;
@@ -152,7 +156,7 @@ async function command(name:string,payload:any):Promise<any> {
     if(input.recipe!==recipe&&recipe!=='all')throw new PilotError('observe_first');
     if(!binding||!snapshot||!snapshot.targets.some(t=>t.id===input.targetId))throw new PilotError('observe_first');
     pending={id:crypto.randomUUID(),expires:Date.now()+60000,plan:{binding,snapshot,recipe:input.recipe,targetId:input.targetId,fields:input.fields,selectOptionIndex:input.selectOptionIndex,credentialId:input.credentialId}};
-    return {target:snapshot.targets.find(t=>t.id===input.targetId),canExecute:true,manual:true,actionId:pending.id};
+    return {target:snapshot.targets.find(t=>t.id===input.targetId),canExecute:true,manual:true,actionId:pending.id,stateVersion:snapshot.stateVersion??binding.documentId+':'+snapshot.documentToken};
   }
   if(name==='select'){
     const input=z.object({provider:providerId,request:z.unknown()}).strict().parse(payload);
@@ -164,7 +168,8 @@ async function command(name:string,payload:any):Promise<any> {
   }
   if(name==='step'){
     const input=z.object({actionId:z.string().uuid(),stateVersion:z.string().min(1).max(200),expect:z.enum(['change','navigation','none']).optional(),timeoutMs:z.number().int().min(100).max(15000).default(8000)}).strict().parse(payload);
-    if(!binding||!snapshot||input.stateVersion!==binding.documentId+':'+snapshot.documentToken||pending?.id!==input.actionId)throw new PilotError('stale_snapshot');
+    if(capabilities.pendingAction(input.actionId))return command('v2.commit',{actionId:input.actionId,stateVersion:input.stateVersion});
+    if(!binding||!snapshot||input.stateVersion!==(snapshot.stateVersion??binding.documentId+':'+snapshot.documentToken)||pending?.id!==input.actionId)throw new PilotError('stale_snapshot');
     const previous=binding,before=snapshot,plan=pending.plan,start=performance.now();let run=generation;
     stepActive=plan.recipe==='click';let action:any,actionError:unknown;
     try{

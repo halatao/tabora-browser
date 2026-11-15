@@ -34,6 +34,20 @@ export function visible(el:Element):boolean{
   }
   return true;
 }
+/** A painted label can expose a clipped native control without exposing arbitrary hidden inputs. */
+export function controlLabel(el:Element):HTMLLabelElement|undefined{
+  if(!(el instanceof HTMLInputElement)||!['checkbox','radio'].includes(el.type)||visible(el))return;
+  let presentationHidden=false;
+  for(let current:Element|null=el;current;current=parentElement(current)){
+    const style=getComputedStyle(current);
+    if(current.matches('[hidden],[inert],[aria-hidden="true"],[data-private],[data-sensitive]')||style.display==='none'||['hidden','collapse'].includes(style.visibility))return;
+    presentationHidden ||= style.opacity==='0'||style.clipPath==='inset(50%)'||['rect(0000)','rect(0px0px0px0px)'].includes(style.clip.replace(/[ ,]/g,''));
+  }
+  if(!presentationHidden)return;
+  const labels=Array.from(el.labels??[]).filter(label=>label.control===el&&label.getRootNode()===el.getRootNode()&&visible(label));
+  if(labels.length!==1||ancestor(labels[0],'[inert],[hidden],[aria-hidden="true"],[data-private],[data-sensitive]'))return;
+  return labels[0];
+}
 export function content(el:Element,maxChars=1000000,includeHidden=false,exclude?:Element):string{
   const chunks:string[]=[],seen=new Set<Node>();let size=0,visited=0,lastBoundary=false;
   const append=(value:string,boundary=false)=>{if(size>=maxChars)return;const chunk=value.slice(0,maxChars-size);chunks.push(chunk);size+=chunk.length;lastBoundary=boundary;};

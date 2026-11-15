@@ -30,6 +30,7 @@
     "test:capabilities": "node tests/capabilities-browser.mjs",
     "test:background": "node tests/background-browser.mjs",
     "test:widgets": "node --import tsx tests/widget-browser.mjs",
+    "test:form-controls": "node tests/form-controls-browser.mjs",
     "test:visual": "node --import tsx tests/visual-workflow-browser.mjs",
     "test:capture": "node tests/capture-guard-browser.mjs",
     "test:workflow": "node --import tsx tests/workflow-browser.mjs",
@@ -52,6 +53,8 @@
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",
     "playwright": "^1.55.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
     "tsx": "^4.20.0",
     "typescript": "7.0.2"
   },

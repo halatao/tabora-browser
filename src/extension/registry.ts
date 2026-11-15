@@ -1,5 +1,5 @@
 import type {ObservationV2,TargetV2} from '../capabilities.js';
-import {ancestor,accessibleName,content,role,composedElements,PAGE_SCAN_LIMIT} from './semantic.js';
+import {ancestor,accessibleName,content,role,composedElements,PAGE_SCAN_LIMIT,controlLabel} from './semantic.js';
 import type {RecordCollection} from '../record-collection.js';
 import {ownedCombobox} from './widgets.js';
 export type RegistryEntry={el:Element;fingerprint:string;target:TargetV2};
@@ -50,9 +50,9 @@ export class Registry{
   validateOptions(id:string,indices:number[]){const el=this.resolve(id).el;if(!(el instanceof HTMLSelectElement))throw new Error('wrong_target_kind');for(const index of indices){const option=el.options[index];if(!option||this.options.get(id)?.get(index)!==JSON.stringify([option.text,option.value,option.disabled]))throw new Error('unobserved_option');}}
   fingerprint(el:Element):string{
     const record=ancestor(el,'[data-id],[data-key],[aria-rowindex]');
-    const widget=ownedCombobox(el);
+    const widget=ownedCombobox(el),label=controlLabel(el),form=el instanceof HTMLInputElement||el instanceof HTMLSelectElement||el instanceof HTMLTextAreaElement||el instanceof HTMLButtonElement?el.form:null;
     return JSON.stringify([el.tagName,role(el),accessibleName(el),el.getAttribute('href'),el.getAttribute('type'),el.getAttribute('autocomplete'),!!ancestor(el,'[data-private],[data-sensitive]'),el.getAttribute('data-id'),el.getAttribute('data-key'),el.getAttribute('aria-rowindex'),ancestor(el,'[data-id],[data-key],[aria-rowindex]')?.getAttribute('data-id'),
-      widget?[this.reference(widget),accessibleName(widget),widget.getAttribute('aria-controls'),widget.disabled,widget.getAttribute('aria-disabled')]:undefined,
+      widget?[this.reference(widget),accessibleName(widget),widget.getAttribute('aria-controls'),widget.disabled,widget.getAttribute('aria-disabled')]:undefined,label?this.reference(label):undefined,form?this.reference(form):undefined,
       record?[record.getAttribute('data-id'),record.getAttribute('data-key'),record.getAttribute('aria-rowindex'),content(record,4000)]:undefined,
       el.matches('[role="row"],tr,[role="option"],[role="treeitem"]')?content(el,4000):undefined]);
   }
