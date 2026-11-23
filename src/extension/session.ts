@@ -15,7 +15,7 @@ let generation=0,busy=false,running=false,closed=false,stepActive=false;
 let capabilityStepActive=false;
 let expectedNavigation:{tabId:number;origin:string;expires:number}|undefined;
 let fileGeneration=0,activeFileTransfer:FilePageInput&{tabId:number;documentId:string;artifactIds:string[]}|undefined;
-const capabilities=createCapabilitySession(id,()=>binding,policy,validateTab,()=>generation,allowedOrigins,async tabId=>{const previous=busy;busy=false;try{return await command('pin',{tabId});}finally{busy=previous;}},siteToolsEnabled,(credentialId,binding)=>host('credential.use',{id:credentialId,binding}));
+const capabilities=createCapabilitySession(id,()=>binding,policy,validateTab,()=>generation,allowedOrigins,async tabId=>{const previous=busy;busy=false;try{return await command('pin',{tabId});}finally{busy=previous;}},siteToolsEnabled,(credentialId,binding)=>host('credential.use',{id:credentialId,binding}),host);
 const compatibility=legacyRecipes((name,payload)=>command('v2.'+name,payload));
 async function inDocument(input:PageInput) {
   if(!binding)throw new PilotError('no_bound_tab');

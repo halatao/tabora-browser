@@ -11,7 +11,7 @@ function frame(message){const body=Buffer.from(JSON.stringify(message)),prefix=B
 child.stdout.on('data',data=>{buffer=Buffer.concat([buffer,data]);while(buffer.length>=4){const size=buffer.readUInt32LE(0);if(buffer.length<size+4)return;const msg=JSON.parse(buffer.subarray(4,size+4));buffer=buffer.subarray(size+4);if(msg.event==='browser-command'){assert.equal(msg.command,'configuration.changed');child.stdin.write(frame({event:'browser-result',id:msg.id,ok:true,data:{invalidated:true}}));continue;}const waiter=pending.get(msg.id);if(waiter){pending.delete(msg.id);clearTimeout(waiter.timer);waiter.resolve(msg);}}});
 function call(command,payload){return new Promise((resolve,reject)=>{const id=randomUUID(),body=Buffer.from(JSON.stringify({id,version:1,command,payload})),prefix=Buffer.alloc(4);prefix.writeUInt32LE(body.length);const timer=setTimeout(()=>reject(new Error('Native timeout: '+command)),15000);pending.set(id,{resolve,timer});child.stdin.write(Buffer.concat([prefix,body]));});}
 try {
-  assert.equal((await call('hello',{id:randomUUID(),name:'Native test',mcpEnabled:false})).ok,true);
+  assert.equal((await call('hello',{id:randomUUID(),name:'Native test',mcpEnabled:true,vaultEnabled:true,mode:'takeover'})).ok,true);
   assert((await call('status')).data.locked);
   const detected=await call('profile.detect',{browser:'chrome'});assert.equal(detected.ok,true);assert.equal(detected.data.automatic.name,'Synthetic managed profile');
   assert.equal((await call('vault.unlock')).ok,true);
@@ -23,10 +23,20 @@ try {
   const disk=await readFile(path.join(dir,'vault.json'),'utf8');assert(!disk.includes('FAKE-native-test-password'));assert(!disk.includes('tester'));
   await call('vault.lock');assert.equal((await call('credential.use',{id:saved.data.entries[0].id,binding})).code,'vault_locked');
   await call('vault.unlock');assert.equal((await call('vault.list')).data.length,1);
+  const prepared=await call('password.prepare',{credentialId:saved.data.entries[0].id,stateVersion:'synthetic-state',binding});assert(prepared.ok,JSON.stringify(prepared));
+  const changeId=prepared.data.changeId;
+  const generated=await call('password.begin',{changeId,stateVersion:'synthetic-state',passwordTargetId:'r1',binding});assert(generated.ok,JSON.stringify(generated));
+  const password=generated.data.password;assert.equal(password.length,24);assert(!JSON.stringify(prepared).includes(password));
+  await call('vault.lock');await call('vault.unlock');assert.equal((await call('password.list')).data[0].status,'unknown');
+  assert.equal((await call('credential.use',{id:saved.data.entries[0].id,binding})).data.password,'FAKE-native-test-password');
+  const finalized=await call('password.resolve',{changeId,stateVersion:'synthetic-state',binding,outcome:'confirmed',confirmation:'agent_verified'});assert(finalized.ok,JSON.stringify(finalized));
+  assert(!JSON.stringify(finalized).includes(password));assert.equal((await call('vault.list')).data.length,1);
+  await call('vault.lock');await call('vault.unlock');assert.equal((await call('credential.use',{id:saved.data.entries[0].id,binding})).data.password,password);
+  const stagedDisk=await readFile(path.join(dir,'vault.json'),'utf8');assert.equal(JSON.parse(stagedDisk).version,2);assert(!stagedDisk.includes(password));assert(!stderr.includes(password));
   const result=await call('decide',{provider:'openai-decisions',request:{requestId:'test',stateVersion:'doc1',question:'Select',context:{},choices:[{id:'a',description:'A'},{id:'ask_user',description:'Ask'}]}});
   assert.equal(result.data.code,'decisions_preview_unavailable');
   assert(!stderr.includes('FAKE-native-test-password'));
-  console.log('PASS: Native framing, real Windows DPAPI persistence, metadata redaction, origin binding, lock and unavailable Decisions.');
+  console.log('PASS: Native framing, real Windows DPAPI v1/v2 persistence, staged password recovery/update by ID, metadata redaction, origin binding, lock and unavailable Decisions.');
 }finally{
   child.stdin.end();await new Promise(resolve=>child.once('exit',resolve));
   assert.equal(path.dirname(dir),base);await rm(dir,{recursive:true,force:true});

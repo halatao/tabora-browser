@@ -4,7 +4,7 @@ export function publicURL(value:string){
 }
 /** This is an export boundary, not a mutation of the executor's live navigation URL. */
 export function exportData<T>(input:T,redact:(value:any)=>any=value=>value):T{
-  const identifier=(key:string,value:string)=>['id','ref','targetId','actionId','sessionId','profileId','runId','artifactId','transferId','rootId','fileRef','captureId','snapshotId','baseSnapshotId','documentId','documentToken','requestId','continuationOf'].includes(key)&&(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value)||/^(?:r|t)\d+$/.test(value))||key==='sha256'&&/^[a-f0-9]{64}$/i.test(value)||key==='stateVersion'&&/^[a-f0-9-]{36}:[a-f0-9-]{36}$/i.test(value);
+  const identifier=(key:string,value:string)=>['id','changeId','credentialId','ref','targetId','actionId','sessionId','profileId','runId','artifactId','transferId','rootId','fileRef','captureId','snapshotId','baseSnapshotId','documentId','documentToken','requestId','continuationOf'].includes(key)&&(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value)||/^(?:r|t)\d+$/.test(value))||key==='sha256'&&/^[a-f0-9]{64}$/i.test(value)||key==='stateVersion'&&/^[a-f0-9-]{36}:[a-f0-9-]{36}$/i.test(value);
   const walk=(value:unknown,key=''):unknown=>{
     // Locally generated protocol refs are opaque capabilities, not page text. Redacting
     // fragments of a short vault secret in these refs would silently break ownership/binding.

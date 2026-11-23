@@ -19,7 +19,9 @@ jobs:
       - run: ./scripts/install-host.ps1
       - run: npx playwright install chromium
       - run: npm run test:form-controls
+      - run: npm run test:password
       - run: npm run test:native
+      - run: npm run test:vault-session
       - run: npm run test:managed
       - run: npm run test:update-browser
       - run: npm run test:mcp

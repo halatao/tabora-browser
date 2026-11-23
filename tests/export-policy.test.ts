@@ -9,8 +9,8 @@ test('desktop execution serializes across profiles and releases after failure',a
   const second=queue.run(async()=>{order.push('B');});await new Promise(resolve=>setTimeout(resolve,10));assert.deepEqual(order,['A']);release();await assert.rejects(first);await second;assert.deepEqual(order,['A','B']);
 });
 test('short secrets are redacted from content without corrupting locally generated protocol references',()=>{
-  const id='aabc1111-2222-4333-8444-555555555555',result=exportData({id,targetId:'r10',stateVersion:id+':'+id,sha256:'a'.repeat(64),text:'a private value',recordKey:'a-record'},value=>typeof value==='string'?value.replaceAll('a','[REDACTED]'):value);
-  assert.equal(result.id,id);assert.equal(result.stateVersion,id+':'+id);assert.equal(result.sha256,'a'.repeat(64));assert(!result.text.includes('a'));assert(result.recordKey.includes('[REDACTED]'));
+  const id='aabc1111-2222-4333-8444-555555555555',result=exportData({id,changeId:id,credentialId:id,targetId:'r10',stateVersion:id+':'+id,sha256:'a'.repeat(64),text:'a private value',recordKey:'a-record'},value=>typeof value==='string'?value.replaceAll('a','[REDACTED]'):value);
+  assert.equal(result.id,id);assert.equal(result.changeId,id);assert.equal(result.credentialId,id);assert.equal(result.stateVersion,id+':'+id);assert.equal(result.sha256,'a'.repeat(64));assert(!result.text.includes('a'));assert(result.recordKey.includes('[REDACTED]'));
 });
 
 test('export preserves exact origin and nonsensitive navigation serialization',()=>{

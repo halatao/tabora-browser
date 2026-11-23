@@ -8,9 +8,10 @@ import {renderFrames} from './render-frames.js';
 import {siteArguments,validateSiteSchema} from '../site-schema.js';
 import {editorText} from './editor.js';
 import {ownedCombobox} from './widgets.js';
+import {passwordFields,fillPasswordFields,type PasswordFields} from './password-fields.js';
 import {clippedRedactions,type CaptureRect} from './capture-redaction.js';
 
-type SensorInput={credential?:{username:string;password:string};op:'credential'|'observe'|'read'|'action'|'point'|'cancel'|'native_prepare'|'native_validate'|'native_finish'|'frame_arm'|'frame_send'|'frame_geometry'|'verify'|'capture_mask'|'capture_clear'|'capture_validate'|'download_target'|'site_discover'|'site_call';origin:string;sessionId:string;documentToken?:string;allowedOrigins?:string[];snapshotId?:string;cursor?:number;limit?:number;baseSnapshotId?:string;read?:ReadInput;action?:unknown;targetId?:string;leaseId?:string;nonce?:string;expect?:unknown;redactTargets?:string[];toolRef?:string;arguments?:unknown;release?:boolean;fresh?:boolean;visual?:{point:{x:number;y:number};rect:string}};
+type SensorInput={passwordFields?:PasswordFields;passwordSecrets?:{password:string;currentPassword?:string};credential?:{username:string;password:string};op:'password_validate'|'password_fill'|'credential'|'observe'|'read'|'action'|'point'|'cancel'|'native_prepare'|'native_validate'|'native_finish'|'frame_arm'|'frame_send'|'frame_geometry'|'verify'|'capture_mask'|'capture_clear'|'capture_validate'|'download_target'|'site_discover'|'site_call';origin:string;sessionId:string;documentToken?:string;allowedOrigins?:string[];snapshotId?:string;cursor?:number;limit?:number;baseSnapshotId?:string;read?:ReadInput;action?:unknown;targetId?:string;leaseId?:string;nonce?:string;expect?:unknown;redactTargets?:string[];toolRef?:string;arguments?:unknown;release?:boolean;fresh?:boolean;visual?:{point:{x:number;y:number};rect:string}};
 type World=typeof globalThis&{__taboraSiteAbort?:AbortController;__taboraFrameListener?:(event:MessageEvent)=>void;__taboraSensor?:{sessionId:string;registry:Registry;native?:{id:string;action:ReturnType<typeof actionSchema.parse>;expires:number;point:{x:number;y:number};identity:string;focus?:Element}};__taboraOperation?:(input:SensorInput)=>Promise<unknown>};
 const world=globalThis as World;
 // Re-injection begins a new sensor generation, including after extension/host reload.
@@ -191,6 +192,13 @@ world.__taboraOperation=async(input:SensorInput)=>{
       snapshot.coverage.truncated ||= metadataTruncated;return {ok:true,snapshot:previous?observationDiff(previous,snapshot):snapshot,fullSnapshot:!previous,continuationOf,timings:{sensorMs:Math.round(performance.now()-started),treeCacheHit:scan.cached,semanticHits}};
     }
     if(input.op==='read')return {ok:true,...reader(registry,input.read!)};
+    if(input.op==='password_validate'||input.op==='password_fill'){
+      if(location.protocol!=='https:'||location.origin!==input.origin||registry.token!==input.documentToken)throw new Error('credential_scope_mismatch');
+      if(!input.snapshotId||!input.passwordFields)throw new Error('invalid_input');
+      if(input.op==='password_validate'){passwordFields(registry,input.snapshotId,input.passwordFields);return {ok:true};}
+      if(!input.passwordSecrets)throw new Error('invalid_input');
+      return fillPasswordFields(registry,input.snapshotId,input.passwordFields,input.passwordSecrets);
+    }
     if(input.op==='credential')return credentialFill(input,registry);
     const baseline=input.snapshotId?registry.snapshots.get(input.snapshotId):undefined;
     if(!baseline)throw new Error('stale_snapshot');

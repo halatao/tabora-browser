@@ -48,7 +48,7 @@ async function fixturePage(context,url){
 }
 try{
   const a=await browser('profile-a');console.log('Profile A connected');const b=await browser('profile-b');console.log('Profile B connected');assert.notEqual(a.profile.id,b.profile.id);
-  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,53);
+  const c=await client();console.log('MCP client connected');assert.equal((await c.listTools()).tools.length,58);
   assert.equal((await tool(c,'browser_profiles')).length,2);
   assert.equal(a.profile.mode,'safe');assert.equal(a.profile.vaultEnabled,false);
   await a.rpc('vault.unlock').then(()=>assert.fail('Disabled vault unlocked'),e=>assert.equal(e.message,'vault_disabled'));

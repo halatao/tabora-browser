@@ -224,6 +224,14 @@ and exact HTTPS origin; the extension validates the fresh form. The result repor
 fill verification without submission. Password bytes never pass through MCP or
 model context.
 
+Password creation/reset/change uses separate `browser_password_prepare`,
+`browser_password_fill`, `browser_password_resolve`, `browser_password_changes`
+and `browser_password_resume` operations. Generated passwords remain in an
+encrypted pending record until an explicit caller-attested website result saves
+the credential. Unknown outcomes preserve the original credential and support
+recovery after restart. See [the password-change contract](password-changes.md),
+including exact document binding and vault-format compatibility.
+
 The calling agent may execute individual tools, or submit a bounded `workflow`
 to `browser_run_start`. The same executor is used by Codex SDK, Claude SDK and
 Jev. Decisions API remains unavailable until its actual transport is available.

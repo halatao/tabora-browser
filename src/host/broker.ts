@@ -19,13 +19,14 @@ import {UpdateChecker} from './updates.js';
 import {buildInfo} from '../build-info.js';
 import {InstallationUpdates,MaintenanceGate,updateId} from './installation-updates.js';
 import {toolDefinitions} from '../browser-api.js';
+import {VaultSessionGrants} from './vault-session.js';
 import {compatibleExtension} from '../../scripts/distribution/extension-identity.mjs';
 const installationUpdates=new InstallationUpdates(),maintenance=new MaintenanceGate();
 await mkdir(stateDir,{recursive:true,mode:0o700});
 const token=randomBytes(32).toString('hex'),osProtector=protector();
 const files=new ArtifactStore(stateDir);
 const updateChecker=new UpdateChecker(buildInfo,stateDir);
-const service:HostService=new HostService(new Vault(path.join(stateDir,'vault.json'),osProtector),stateDir,()=>router.invalidateAll()),router=new BrokerRouter(new RunController(value=>service.vault.locked?value:service.vault.redact(value)),files,updateChecker);
+const service:HostService=new HostService(new Vault(path.join(stateDir,'vault.json'),osProtector),stateDir,()=>router.invalidateAll(),new VaultSessionGrants(path.join(stateDir,'vault-unlocks'),osProtector)),router=new BrokerRouter(new RunController(value=>service.vault.locked?value:service.vault.redact(value)),files,updateChecker);
 installationUpdates.startAutomatic(updateChecker);
 const peers=new Set<Peer>();let idle:NodeJS.Timeout;
 // Clients can connect before DPAPI finishes, but authentication waits for the new credential.
@@ -98,13 +99,18 @@ const server=createServer(socket=>{
     if(command==='profile.register'){
       if(maintenance.updateId)throw new PilotError('update_maintenance');
       if(profile)throw new PilotError('already_registered');const parsed=profileSchema.parse(payload);
-      router.register({profile:parsed,call:(command,payload)=>peer.call('browser',{command,payload})});profile=parsed;return profile;
+      router.register({profile:parsed,call:(command,payload)=>peer.call('browser',{command,payload})});profile=parsed;
+      if(parsed.vaultEnabled===true)await service.restoreProfileUnlock(parsed.id,()=>{if(socket.destroyed)throw new PilotError('profile_disconnected');});
+      else await service.revokeProfileUnlock(parsed.id);
+      return profile;
     }
     if(!profile)throw new PilotError('profile_required');
     if(command==='profile.update'){
       if(payload?.id&&payload.id!==profile.id)throw new PilotError('profile_scope_mismatch');
+      const next=profileSchema.parse({...profile,...payload,id:profile.id,managedProfile:profile.managedProfile,nativeLifecycleVersion:profile.nativeLifecycleVersion,extensionChannel:profile.extensionChannel});
+      if(next.vaultEnabled!==true)await service.revokeProfileUnlock(profile.id);
       if(['mode','vaultEnabled','activeProvider','mcpEnabled'].some(key=>payload?.[key]!==undefined&&payload[key]!== (profile as any)[key]))service.invalidateProfileDecisions(profile.id);
-      profile=profileSchema.parse({...profile,...payload,id:profile.id,managedProfile:profile.managedProfile,nativeLifecycleVersion:profile.nativeLifecycleVersion,extensionChannel:profile.extensionChannel});router.update(profile);return profile;
+      profile=next;router.update(profile);return profile;
     }
     if(command!=='host')throw new PilotError('unknown_command');
     const p=z.object({sessionId:z.string().min(1).max(100),command:z.string().max(40),payload:z.unknown().optional()}).strict().parse(payload);
@@ -141,7 +147,7 @@ const server=createServer(socket=>{
     if(['vault.lock','vault.put','vault.remove','vault.scope'].includes(p.command))router.runs.cancelAll();
     if(['vault.put','vault.remove','vault.scope'].includes(p.command))await router.invalidateAll();
     if(profile.vaultEnabled===false&&(p.command.startsWith('vault.')&&p.command!=='vault.lock'||p.command==='credential.use'))throw new PilotError('vault_disabled');
-    const assertActive=()=>{if(p.command==='provider.configure'&&!profile?.mcpEnabled)throw new PilotError('mcp_access_disabled');};
+    const assertActive=()=>{if((p.command==='provider.configure'||p.command.startsWith('password.'))&&!profile?.mcpEnabled)throw new PilotError('mcp_access_disabled');if(p.command.startsWith('password.')&&(profile?.mode==='readonly'||!profile?.vaultEnabled))throw new PilotError('vault_access_revoked');};
     return service.handle(profile.id,p.sessionId,p.command,p.payload,profile.vaultEnabled!==false,assertActive);
   };
 });
