@@ -16,7 +16,7 @@ async function fingerprint(directory){
 }
 await fingerprint('src');
 await fingerprint('scripts/distribution');
-for(const file of ['package.json','package-lock.json','scripts/build.mjs','scripts/cli.mjs','scripts/state-directory.mjs','scripts/setup-lib.mjs','scripts/browser.mjs','release-trust.json','extension-key.txt','extension-identities.json','docs/publishing/chrome-store-public-key.pem','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
+for(const file of ['package.json','package-lock.json','scripts/build.mjs','scripts/cli.mjs','scripts/state-directory.mjs','scripts/setup-lib.mjs','scripts/browser.mjs','scripts/windows-session.ps1','release-trust.json','extension-key.txt','extension-identities.json','docs/publishing/chrome-store-public-key.pem','tsconfig.json']){hash.update(file);hash.update(await readFile(file));}
 const buildInfo={version,fingerprint:hash.digest('hex'),contractVersion:2};
 const define={__TABORA_BUILD__:JSON.stringify(buildInfo)};
 await mkdir('dist/extension', { recursive: true });
@@ -53,5 +53,6 @@ await build({ define, entryPoints: ['src/host/main.ts','src/host/broker.ts','src
 await writeFile('dist/build-info.json',JSON.stringify(buildInfo,null,2)+'\n');
 for (const file of ['panel.html','panel.css','icon.png']) await copyFile('src/extension/'+file,'dist/extension/'+file);
 await copyFile('scripts/dpapi.ps1','dist/host/dpapi.ps1');
+await copyFile('scripts/windows-session.ps1','dist/host/windows-session.ps1');
 await writeFile('mcp.config.json',JSON.stringify({mcpServers:{'tabora-browser':{command:process.execPath,args:[path.join(root,'dist/host/mcp.js')],env:{TABORA_FILE_ROOTS:process.env.TABORA_FILE_ROOTS??JSON.stringify([root]),...(process.env.TABORA_STATE_DIR?{TABORA_STATE_DIR:process.env.TABORA_STATE_DIR}:{})}}}},null,2)+'\n');
 console.log('Built extension: ' + extensionId);

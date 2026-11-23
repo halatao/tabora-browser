@@ -128,8 +128,10 @@ Agents can also [configure the decision model through MCP](docs/technical-refere
 
 **Off by default.** Enable and explicitly unlock it in the panel.
 
+MCP agents can [prepare, fill and confirm a password change](docs/password-changes.md) without receiving its value. Failed or uncertain changes keep the original credential active. The Tabora vault is separate from your agent application's credential vault.
+
 - Save credentials **per profile**, or explicitly share them across profiles.
-- Each profile has its own unlock grant and timeout.
+- Unlock each profile once per Windows sign-in. Idle time, closing the panel/browser, and host reconnects do not require unlocking again. Manual lock or disabling the vault clears remembered access; sign-out and reboot require a new unlock.
 - Login uses a credential ID and the exact bound HTTPS origin. Passwords and provider keys are not returned through MCP or sent to decision models.
 
 Storage uses AES-256-GCM with a Windows DPAPI-protected key. It is local to the Windows user, with no cloud sync or cross-machine recovery. Profile scoping is not a security boundary against arbitrary processes running as that same user.

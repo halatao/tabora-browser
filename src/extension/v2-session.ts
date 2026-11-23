@@ -9,8 +9,9 @@ import {captureRegion} from './capture.js';
 import {downloadLink} from './download.js';
 import {imageSize} from '../image-size.js';
 import {frameAccess} from './frame-access.js';
+import {passwordPrepareSchema,passwordFillSchema,passwordResumeSchema,passwordResolveSchema} from '../password-contract.js';
 
-export function createCapabilitySession(id:string,getBinding:()=>Binding|undefined,getPolicy:()=>Pick<BrowserProfile,'mode'|'vaultEnabled'>,validateTab:(tabId:number)=>Promise<void>,getGeneration:()=>number,allowedOrigins:()=>string[],rebind:(tabId:number)=>Promise<Binding>,siteToolsEnabled:()=>boolean,credentialUse?:(credentialId:string,binding:Binding)=>Promise<{username:string;password:string}>){
+export function createCapabilitySession(id:string,getBinding:()=>Binding|undefined,getPolicy:()=>Pick<BrowserProfile,'mode'|'vaultEnabled'>,validateTab:(tabId:number)=>Promise<void>,getGeneration:()=>number,allowedOrigins:()=>string[],rebind:(tabId:number)=>Promise<Binding>,siteToolsEnabled:()=>boolean,credentialUse?:(credentialId:string,binding:Binding)=>Promise<{username:string;password:string}>,passwordHost?:(command:string,payload:unknown)=>Promise<any>){
   const diagnostics=new DiagnosticBuffer();
   async function preparedRead<T>(read:()=>Promise<T>){const b=binding(),run=getGeneration();return withInteractiveTab(b.tabId,async()=>{await validateTab(b.tabId);if(run!==getGeneration())throw new PilotError('cancelled');},read);}
   const loaded=new Set<string>(),snapshots=new Map<string,{frameId:number;documentId:string;origin:string;snapshotId:string;documentToken:string;targets:TargetV2[]}>();
@@ -84,6 +85,28 @@ export function createCapabilitySession(id:string,getBinding:()=>Binding|undefin
     if(current?.frameId!==0)throw new PilotError('frame_limit');return result;
   }
   async function command(name:string,input:any){
+    if(name.startsWith('password.')){
+      enforceRecipe(getPolicy(),'login');if(handoff)throw new PilotError('needs_user');
+      if(!passwordHost)throw new PilotError('unsupported_operation');
+      const op=name.slice(9),request=op==='prepare'?passwordPrepareSchema.parse(input):op==='fill'?passwordFillSchema.parse(input):op==='resume'?passwordResumeSchema.parse(input):op==='resolve'?passwordResolveSchema.parse(input):undefined;
+      if(!request)throw new PilotError('unknown_command');
+      const b=binding(),current=snapshots.get('0'),run=getGeneration();exactOrigin(b.origin,true);
+      if(!current||request.stateVersion!==b.documentId+':'+current.snapshotId)throw new PilotError('stale_snapshot');
+      const guard=async()=>{enforceRecipe(getPolicy(),'login');await validateTab(b.tabId);await liveFrame(0);if(run!==getGeneration())throw new PilotError('cancelled');};
+      await guard();
+      if(op!=='fill')return passwordHost('password.'+op,{...request,binding:b});
+      const fields=passwordFillSchema.parse(input),sensorInput={snapshotId:current.snapshotId,documentToken:current.documentToken,passwordFields:fields};
+      await sensor(0,{op:'password_validate',...sensorInput});
+      const secrets=await passwordHost('password.begin',{...fields,binding:b});
+      // The host durably marks an unknown outcome before exposing secrets to the isolated reader.
+      try{
+        await guard();const result=await sensor(0,{op:'password_fill',...sensorInput,passwordSecrets:secrets});
+        if(!result.verified)return {...result,status:'unknown'};
+        const change=await passwordHost('password.filled',{changeId:fields.changeId,binding:b});
+        return {...result,...change};
+      }catch(error){return {changeId:fields.changeId,status:'unknown',code:'password_fill_outcome_unknown',cause:safeCode(error),verified:false,submitted:false};}
+      finally{secrets.password='';secrets.currentPassword=undefined;}
+    }
     if(name==='credential'){
       const request=z.object({frameId:z.literal(0),stateVersion:z.string().min(1),targetId:z.string().min(1),credentialId:z.string().uuid()}).strict().parse(input);
       enforceRecipe(getPolicy(),'login');if(handoff)throw new PilotError('needs_user');

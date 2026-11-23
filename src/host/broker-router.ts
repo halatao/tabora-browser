@@ -110,6 +110,7 @@ export class BrokerRouter {
     const providerCommands:Partial<Record<BrowserTool,string>>={browser_provider_status:'provider.status',browser_provider_models:'provider.catalog',browser_provider_configure:'provider.configure',browser_provider_select:'provider.select'};
     if(providerCommands[tool]){const {profileId,...payload}=p;return this.connection(profileId).call(providerCommands[tool]!,payload);}
     if(tool==='browser_vault_list')return this.connection(p.profileId).call('vault.list');
+    if(tool==='browser_password_changes')return this.connection(p.profileId).call('password.list');
     if(tool==='browser_session_create'){
       if([...this.sessions.values()].filter(s=>s.owner===owner).length>=20)throw new PilotError('session_limit');
       const c=this.connection(p.profileId),id=randomUUID();this.sessions.set(id,{id,owner,profileId:p.profileId,name:p.name});
@@ -171,6 +172,8 @@ export class BrokerRouter {
     }
     if(tool!=='browser_cancel'&&this.runs.active(s.profileId,sessionId))throw new PilotError('run_active');
     if(tool==='browser_credential_fill')return c.call('v2.credential',{sessionId,...payload});
+    const passwords:Partial<Record<BrowserTool,string>>={browser_password_prepare:'v2.password.prepare',browser_password_fill:'v2.password.fill',browser_password_resume:'v2.password.resume',browser_password_resolve:'v2.password.resolve'};
+    if(passwords[tool])return c.call(passwords[tool]!,{sessionId,...payload});
     const commands:Partial<Record<BrowserTool,string>>={browser_site_tools:'v2.site_tools',browser_site_call:'v2.site_call',browser_popups:'popups.list',browser_handoff:'v2.handoff',browser_resume:'v2.resume',browser_capabilities:'v2.capabilities',browser_frames:'v2.frames',browser_state:'v2.state',browser_read:'v2.read',browser_plan:'v2.plan',browser_commit:'v2.commit',browser_session_attach:'pin',browser_session_open:'tabs.open',browser_observe:'observe',browser_decide:'decide',browser_prepare:'manual',browser_execute:'execute',browser_step:'step',browser_cancel:'cancel'};
     return c.call(commands[tool]!,{sessionId,...payload});
   }

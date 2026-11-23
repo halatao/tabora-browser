@@ -137,9 +137,9 @@ async function dispatch(name:string,input:any,source:'panel'|'mcp'|'controller')
   activeDispatches++;
   try{
     const result=await dispatchInternal(name,input,source);
-    if(['v2.commit','v2.site_call','files.upload'].includes(name)&&(result?.action?.outcome==='unknown'||result?.action?.dispatch==='unknown'||result?.dispatch==='unknown'))await rememberUncertainty(input?.sessionId??'panel');
+    if(['v2.commit','v2.site_call','files.upload','v2.password.fill'].includes(name)&&(result?.action?.outcome==='unknown'||result?.action?.dispatch==='unknown'||result?.dispatch==='unknown'||name==='v2.password.fill'&&result?.status==='unknown'))await rememberUncertainty(input?.sessionId??'panel');
     return result;
-  }catch(error){if(['v2.commit','v2.site_call','files.upload'].includes(name)&&(['action_outcome_unknown','connection_lost'].includes(safeCode(error))||['sent','unknown'].includes(safeErrorDetails(error)?.dispatch??'')))await rememberUncertainty(input?.sessionId??'panel');throw error;}
+  }catch(error){if(['v2.commit','v2.site_call','files.upload','v2.password.fill'].includes(name)&&(['action_outcome_unknown','connection_lost'].includes(safeCode(error))||['sent','unknown'].includes(safeErrorDetails(error)?.dispatch??'')))await rememberUncertainty(input?.sessionId??'panel');throw error;}
   finally{activeDispatches--;}
 }
 async function dispatchInternal(name:string,input:any,source:'panel'|'mcp'|'controller'):Promise<any>{
@@ -180,8 +180,9 @@ async function dispatchInternal(name:string,input:any,source:'panel'|'mcp'|'cont
     return summary(workspace(p.id??crypto.randomUUID(),p.name,source==='mcp',p.windowId,(p.allowedOrigins??[]).map(url=>exactOrigin(url)),p.allowPopups,p.siteTools));
   }
   if(name==='tabs.list')return (await chrome.tabs.query({})).filter(t=>/^https?:/.test(t.url??'')&&(profile.mode!=='safe'||[...sessions.values()].some(w=>w.createdTabs.has(t.id!)&&w.safeWindowId===t.windowId&&w.groupId===t.groupId))).map(t=>({id:t.id,windowId:t.windowId,groupId:t.groupId,url:t.url,title:t.title,ownerSessionId:owners.get(t.id!)}));
-  if(['configure','provider.catalog','vault.unlock','vault.lock','vault.list','vault.put','vault.remove','vault.scope'].includes(name)){
-    if(source==='mcp'&&!['vault.list','provider.catalog'].includes(name))throw new PilotError('forbidden');
+  if(['configure','provider.catalog','vault.unlock','vault.lock','vault.list','vault.put','vault.remove','vault.scope','password.list'].includes(name)){
+    if(source==='mcp'&&!['vault.list','provider.catalog','password.list'].includes(name))throw new PilotError('forbidden');
+    if(name==='password.list'&&!profile.vaultEnabled)throw new PilotError('vault_disabled');
     if(name.startsWith('vault.')&&name!=='vault.lock'&&!profile.vaultEnabled)throw new PilotError('vault_disabled');
     if(['configure','vault.lock','vault.put','vault.remove','vault.scope'].includes(name))for(const w of sessions.values())w.session.invalidate();
     return host(name,input);
