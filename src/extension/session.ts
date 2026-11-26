@@ -35,6 +35,7 @@ function decisionRequest(question:string,selectedRecipe=recipe):DecisionRequest 
 }
 async function command(name:string,payload:any):Promise<any> {
   if(name.startsWith('v2.')){
+    if(name==='v2.commit'&&pending&&pending.id===payload?.actionId)throw new PilotError('legacy_action_requires_step_or_execute');
     if(name==='v2.plan')pending=undefined;
     if(!binding&&expectedNavigation&&['v2.state','v2.frames'].includes(name)){
       const candidate=expectedNavigation;if(candidate.expires<Date.now()){expectedNavigation=undefined;throw new PilotError('no_bound_tab');}
@@ -199,6 +200,7 @@ async function command(name:string,payload:any):Promise<any> {
     }finally{stepActive=false;}
   }
   if(name==='execute') {
+    if(payload?.actionId&&capabilities.pendingAction(payload.actionId))throw new PilotError('v2_plan_requires_commit_or_step');
     if(!pending||pending.expires<Date.now()||(payload?.actionId&&payload.actionId!==pending.id))throw new PilotError('decision_expired');
     const {plan}=pending;pending=undefined;busy=true;const run=generation;
     try {

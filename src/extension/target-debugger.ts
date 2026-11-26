@@ -44,7 +44,7 @@ export async function withTargetDebugger<T>(tabId:number,validate:()=>Promise<vo
     catch(error){expired=true;throw error instanceof PilotError?error:new PilotError('background_debugger_unavailable');}
     acquiredAt=performance.now();chrome.debugger.onDetach.addListener(detached);chrome.debugger.onEvent.addListener(frame);
     try{await command('Emulation.setFocusEmulationEnabled',{enabled:true});}
-    catch{throw new PilotError('background_emulation_unavailable');}
+    catch(error){throw error instanceof PilotError?error:new PilotError('background_emulation_unavailable',undefined,{blockers:[],phase:'render',dispatch:'not_sent',nextStep:'handoff'});}
     try{
       await command('Page.enable');
       await command('Page.startScreencast',{format:'jpeg',quality:0,maxWidth:1,maxHeight:1,everyNthFrame:1});rendering=true;

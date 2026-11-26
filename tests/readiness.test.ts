@@ -95,6 +95,18 @@ test('unsupported background emulation fails before dispatch and detaches only i
   }finally{Object.defineProperty(globalThis,'chrome',{value:original,configurable:true});}
 });
 
+test('emulation command timeout remains distinguishable from unsupported emulation',async t=>{
+  const original=globalThis.chrome,events:string[]=[],fake=fakeDebugger(events);
+  const send=fake.debugger.sendCommand;
+  fake.debugger.sendCommand=async(target,method,params)=>{if(method==='Emulation.setFocusEmulationEnabled'&&params?.enabled)return new Promise(()=>{});return send(target,method,params);};
+  Object.defineProperty(globalThis,'chrome',{value:fake,configurable:true});t.mock.timers.enable({apis:['setTimeout']});
+  try{
+    const rejected=assert.rejects(withTargetDebugger(76,async()=>{},async()=>assert.fail('Must not dispatch')),/background_command_timeout/);
+    for(let i=0;i<30;i++)await Promise.resolve();t.mock.timers.tick(3001);await rejected;
+    assert(events.includes('detach 76'));assert.equal(fake.frames.size,0);
+  }finally{Object.defineProperty(globalThis,'chrome',{value:original,configurable:true});t.mock.timers.reset();}
+});
+
 test('CDP detachment and permission revocation reject nested input without reattaching',async()=>{
   const original=globalThis.chrome,events:string[]=[],fake=fakeDebugger(events);
   Object.defineProperty(globalThis,'chrome',{value:fake,configurable:true});

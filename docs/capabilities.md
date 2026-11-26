@@ -37,6 +37,16 @@ blocks capture; no unmasked fallback is allowed.
 `browser_prepare` can translate an observed top-frame V2 target into a fresh
 compatibility menu, including generic clickable controls. Prefer
 `browser_plan`/`browser_commit` when retaining exact V2 stateVersion binding.
+`browser_step` accepts both V2 plans and compatibility actions; pass the returned
+`stateVersion` verbatim. `browser_execute` accepts compatibility actions only:
+a V2 plan returns `v2_plan_requires_commit_or_step` without dispatch. Passing a
+compatibility action to `browser_commit` returns `legacy_action_requires_step_or_execute`.
+Neither mismatch consumes the correctly prepared action.
+
+Click/fill/login menus do not read unrelated tables. All/extract menus retain
+malformed tables with `previewError` and `previewTruncated: true`, without invented
+rows; an exact extraction still fails. Nested table/grid rows belong only to their
+nearest table/grid, so an inner grid cannot corrupt its outer table's layout.
 `navigate` changes the location only; use `click` to activate JavaScript tabs,
 including tabs associated with URL fragments.
 

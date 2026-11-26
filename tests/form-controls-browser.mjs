@@ -73,5 +73,31 @@ try{
   const first=await call('observe',{recipe:'click'}),second=await call('observe',{recipe:'click',cursor:first.nextCursor}),third=await call('observe',{recipe:'click',cursor:second.nextCursor});assert.equal(first.snapshot.targets.length,48);assert.equal(second.snapshot.targets[0].name,'Action 48');assert.equal(third.snapshot.targets.at(-1).name,'Action 139');assert.equal(third.nextCursor,null);
   const p=await call('manual',{recipe:'click',targetId:third.snapshot.targets.at(-1).id});await call('step',{actionId:p.actionId,stateVersion:p.stateVersion,expect:'none',timeoutMs:1000});
   checks.push('all 140 menu targets are reachable and the final one can execute');
+  await page.setContent(`<table aria-label="Outer"><tr><td rowspan="2">Group</td><td><table aria-label="Inner"><tr><td aria-colindex="1">Nested</td></tr></table></td></tr><tr><td>Last</td></tr></table>
+    <div role="grid" aria-label="Malformed"><div role="row"><div role="gridcell" aria-rowspan="2" aria-colindex="1">A</div></div><div role="row"><div role="gridcell" aria-colindex="1">B</div></div></div>
+    <textarea aria-label="Reply"></textarea><button onclick="window.saved=(window.saved??0)+1">Save reply</button>`);
+  observed=await state();
+  const readTable=async(name)=>call('v2.read',{frameId:0,targetId:find(observed,name).id,format:'rows',offset:0,limit:100});
+  const outer=await readTable('Outer'),inner=await readTable('Inner');
+  assert.deepEqual(outer.rows,[['Group','Nested'],['Group','Last']]);assert.equal(outer.complete,true);
+  assert.deepEqual(inner.rows,[['Nested']]);assert.equal(inner.complete,true);
+  await call('v2.read',{frameId:0,targetId:find(observed,'Malformed').id,format:'rows',offset:0,limit:100},'overlapping_table_cells');
+  checks.push('nested tables have independent exact rows; actual conflicting spans still fail');
+  observed=await state();let preparedReply=await call('manual',{recipe:'fill',targetId:find(observed,'Reply').id,fields:{Reply:'Checked'}});
+  const filledReply=await call('step',{actionId:preparedReply.actionId,stateVersion:preparedReply.stateVersion,expect:'none',timeoutMs:1000});
+  assert.equal(await page.getByRole('textbox',{name:'Reply',exact:true}).inputValue(),'Checked');
+  assert.equal(filledReply.snapshot.targets.find(t=>t.name==='Malformed').previewError,'overlapping_table_cells');
+  observed=await state();await call('manual',{recipe:'click',targetId:find(observed,'Reply').id},'wrong_target_kind');
+  observed=await state();preparedReply=await call('manual',{recipe:'click',targetId:find(observed,'Save reply').id});
+  await call('v2.commit',{actionId:preparedReply.actionId,stateVersion:preparedReply.stateVersion},'legacy_action_requires_step_or_execute');
+  await call('step',{actionId:preparedReply.actionId,stateVersion:preparedReply.stateVersion,expect:'none',timeoutMs:1000});assert.equal(await page.evaluate(()=>window.saved),1);
+  observed=await state();const v2Plan=await call('v2.plan',{frameId:0,stateVersion:observed.stateVersion,action:{type:'click',targetId:find(observed,'Save reply').id}});
+  await call('execute',{actionId:v2Plan.actionId},'v2_plan_requires_commit_or_step');assert.equal(await page.evaluate(()=>window.saved),1);
+  await call('step',{actionId:v2Plan.actionId,stateVersion:v2Plan.stateVersion});assert.equal(await page.evaluate(()=>window.saved),2);
+  await call('step',{actionId:v2Plan.actionId,stateVersion:v2Plan.stateVersion},'stale_snapshot');assert.equal(await page.evaluate(()=>window.saved),2);
+  observed=await state();await call('manual',{recipe:'click',targetId:find(observed,'Save reply').id});
+  await call('execute');assert.equal(await page.evaluate(()=>window.saved),3);
+  checks.push('legacy prepare/step survives malformed previews; V2 step dispatches once and executor mismatches do not dispatch');
+  checks.push('panel-compatible execute without an explicit actionId consumes its legacy action once');
   console.log(JSON.stringify({passed:true,checks,fixture:directory}));
 }finally{clearTimeout(watchdog);await context?.close();await new Promise(resolve=>server.close(resolve));}
