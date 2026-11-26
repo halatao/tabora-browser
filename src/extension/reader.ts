@@ -48,7 +48,7 @@ export function reader(registry:Registry,input:ReadInput):ReaderResult&{revision
     return {...base,revision,options,nextOffset:end<all.length?end:null,complete:end>=all.length,truncated:end<all.length};
   }
   const scan=el.matches('table,[role="table"],[role="grid"]')?composedElements(el):{elements:[],truncated:false};
-  const rows=scan.elements.filter(row=>row!==el&&row.matches('tr,[role="row"]')&&visible(row));
+  const rows=scan.elements.filter(row=>row!==el&&row.matches('tr,[role="row"]')&&visible(row)&&ancestor(parentElement(row)??row,'table,[role="table"],[role="grid"]')===el);
   const cells=(row:Element)=>composedElements(row).elements.filter(cell=>cell!==row&&cell.matches('th,td,[role="cell"],[role="gridcell"],[role="columnheader"],[role="rowheader"]')&&ancestor(cell,'tr,[role="row"]')===row);
   if(input.format==='rows'||input.format==='aggregate'){
     if(!el.matches('table,[role="table"],[role="grid"]'))throw new Error('wrong_target_kind');

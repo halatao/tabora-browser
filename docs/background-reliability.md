@@ -22,6 +22,10 @@ The internal controller receives bounded diagnostics in its decision history. It
 
 ## Diagnostics and interruption
 
+A focus-emulation command timeout returns `background_command_timeout`, not
+`background_emulation_unavailable`. Unsupported emulation still fails before
+dispatch; neither case activates Chrome or retries the requested write.
+
 Use `browser_diagnostics` with an owned `sessionId`. The buffer retains at most 100 bounded events for 15 minutes; it is in memory and scoped to that session. Export also has a 128 KB UTF-8 budget and declares `truncated` when only the latest events fit, so multilingual blocker labels cannot break native messaging. It contains no full DOM, field values, screenshots, credentials or URL query strings. Diagnostics can include trace ID, preparation phase, dispatch state, blocker identity, geometry and tab/window/document visibility. Interaction results include queue and CDP acquisition/render/operation/cleanup timing separately from executor verification timings.
 
 `target_obscured` describes document hit testing. It does not establish that another desktop window is covering Chrome. Agents should inspect the blocker and fresh state instead of asking users to show Chrome automatically.

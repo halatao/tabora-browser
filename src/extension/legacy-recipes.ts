@@ -32,7 +32,11 @@ export function legacyRecipes(call:(name:string,input:any)=>Promise<any>){
       else if(['textbox','spinbutton'].includes(target.kind)&&!target.secret&&!target.readonly&&(!target.formId||!formIds.has(target.formId)))projected={id:target.id,kind:'field',name:target.name,fields:[target.name],disabled:target.disabled};
       else if(['checkbox','radio','switch'].includes(target.kind))projected={id:target.id,kind:target.kind==='radio'?'radio':target.kind==='switch'?'switch':'checkbox',name:target.name,checked:target.checked,disabled:target.disabled||target.readonly};
       else if(['link','button','tab'].includes(target.kind)||target.clickable)projected={id:target.id,kind:target.kind==='link'?'link':'button',name:target.name,href:target.href?new URL(target.href).pathname+new URL(target.href).search:undefined,contains:target.contains,containsTruncated:target.containsTruncated,expanded:target.expanded};
-      else if(['table','grid'].includes(target.kind)){const read=await table(target.id,6);projected={id:target.id,kind:'table',name:read.rows[0]?.join(' | ')??target.name,preview:read.rows,previewTruncated:read.truncated,section:target.section};}
+      else if(['table','grid'].includes(target.kind)&&(kind==='all'||kind==='extract')){
+        projected={id:target.id,kind:'table',name:target.name,previewTruncated:true,section:target.section};
+        try{const read=await table(target.id,6);Object.assign(projected,{name:read.rows[0]?.join(' | ')??target.name,preview:read.rows,previewTruncated:read.truncated});}
+        catch(error){const code=error instanceof PilotError?error.code:error instanceof Error?error.message:'';if(!['overlapping_table_cells','incomplete_table_layout'].includes(code))throw error;projected.previewError=code;}
+      }
       else if(target.kind==='file')projected={id:target.id,kind:'file',name:target.name,accept:target.accept,multiple:target.multiple};
       else if(target.name==='Page body')projected={id:target.id,kind:'text',name:'Obsah stránky'};
       if(projected&&(kind==='all'||kind==='extract'&&['table','text'].includes(projected.kind)||kind==='click'&&['link','button','checkbox','radio','switch'].includes(projected.kind)||kind==='fill'&&['form','field','select'].includes(projected.kind)||kind==='login'&&projected.kind==='form')){projected.section??=target.section;result.push(projected);}
