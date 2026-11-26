@@ -95,6 +95,9 @@ try{
   await call('execute',{actionId:v2Plan.actionId},'v2_plan_requires_commit_or_step');assert.equal(await page.evaluate(()=>window.saved),1);
   await call('step',{actionId:v2Plan.actionId,stateVersion:v2Plan.stateVersion});assert.equal(await page.evaluate(()=>window.saved),2);
   await call('step',{actionId:v2Plan.actionId,stateVersion:v2Plan.stateVersion},'stale_snapshot');assert.equal(await page.evaluate(()=>window.saved),2);
+  observed=await state();await call('manual',{recipe:'click',targetId:find(observed,'Save reply').id});
+  await call('execute');assert.equal(await page.evaluate(()=>window.saved),3);
   checks.push('legacy prepare/step survives malformed previews; V2 step dispatches once and executor mismatches do not dispatch');
+  checks.push('panel-compatible execute without an explicit actionId consumes its legacy action once');
   console.log(JSON.stringify({passed:true,checks,fixture:directory}));
 }finally{clearTimeout(watchdog);await context?.close();await new Promise(resolve=>server.close(resolve));}
